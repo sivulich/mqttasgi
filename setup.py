@@ -15,6 +15,7 @@ setup(
     author_email="sivulich@itba.edu.ar",
     url="https://github.com/sivulich/mqttasgi",
     description="MQTT ASGI Protocol Server",
+    long_description_content_type="text/markdown",
     long_description=open("README.md").read(),
     license="MIT",
     packages=["mqttasgi"],
