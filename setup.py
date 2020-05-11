@@ -14,6 +14,7 @@ setup(
     author="Santiago Ivulich",
     author_email="sivulich@itba.edu.ar",
     url="https://github.com/sivulich/mqttasgi",
+    description_content_type='text/text', 
     description="MQTT ASGI Protocol Server",
     long_description_content_type="text/markdown",
     long_description=open("README.md").read(),
