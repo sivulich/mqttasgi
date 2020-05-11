@@ -18,6 +18,7 @@ setup(
     long_description=open("README.md").read(),
     license="MIT",
     packages=["mqttasgi"],
+    include_package_data=True,
     install_requires=[
         "paho-mqtt",
     ],
