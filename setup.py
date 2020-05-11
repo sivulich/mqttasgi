@@ -23,7 +23,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "mqttasgi=mqttasgi.cli",
+            "mqttasgi=mqttasgi.cli:main",
         ]
     },
     classifiers=[
