@@ -4,7 +4,8 @@ mqttasgi is an ASGI protocol server that implements an interface for MQTT.
 # Usage
     mqttasgi -H localhost -p 1883 my_application.asgi:application
 In your routing
-   application = ProtocolTypeRouter({
+
+    application = ProtocolTypeRouter({
       'websocket': AllowedHostsOriginValidator(URLRouter([
           url('.*', WebsocketConsumer)
       ])),
