@@ -18,7 +18,7 @@ def get_application(application_name):
     return application
 
 
-main():
+def main():
     parser = argparse.ArgumentParser(description="MQTT ASGI Protocol Server")
     parser.add_argument("-H", "--host", help="MQTT broker host",
                         default="localhost")
