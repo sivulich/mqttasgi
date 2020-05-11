@@ -29,9 +29,8 @@ setup(
         ]
     },
     classifiers=[
-        'Development Status :: 1 - Beta',
         'Environment :: Web Environment',
-        'License :: MIT',
+        'License :: OSI Approved :: MIT License',
         'Framework :: Django',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
@@ -40,6 +39,5 @@ setup(
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Topic :: Internet :: WWW/HTTP',
-        'Topic :: Internet :: MQTT',
     ]
 )
