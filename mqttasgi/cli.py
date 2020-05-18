@@ -1,24 +1,11 @@
-import sys
-import importlib
 import argparse
 import logging
-
 from .server import Server
+from .utils import get_application
 
 logger = logging.getLogger(__name__)
 
-
-def get_application(application_name):
-    sys.path.insert(0, ".")
-    module_path, object_path = application_name.split(":", 1)
-    application = importlib.import_module(module_path)
-    for bit in object_path.split("."):
-        application = getattr(application, bit)
-
-    return application
-
-
-def main():
+if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="MQTT ASGI Protocol Server")
     parser.add_argument("-H", "--host", help="MQTT broker host",
                         default="localhost")

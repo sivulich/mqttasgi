@@ -40,5 +40,9 @@ setup(
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Topic :: Internet :: WWW/HTTP',
+        'Topic :: Scientific/Engineering :: Interface Engine/Protocol Translator',
+        'Topic :: Software Development :: Libraries :: Python Modules',
+        'Topic :: Internet :: WWW/HTTP :: WSGI :: Server',
+        'Topic :: Home Automation'
     ]
 )

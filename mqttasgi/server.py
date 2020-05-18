@@ -6,7 +6,7 @@ import time
 import signal
 import json
 import paho.mqtt.client as mqtt
-from asgiref.sync import async_to_sync
+from .utils import get_application
 
 _logger = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ class Server(object):
 
     async def mqtt_publish(self, app_id, msg):
         mqqt_publication = msg['mqtt']
-        self.log.debug("[mqttasgi][channels][publish] - Application {} publishing at {}:{}"
+        self.log.debug("[mqttasgi][app][publish] - Application {} publishing at {}:{}"
                      .format(app_id, mqqt_publication['topic'], mqqt_publication.get('qos', 1)))
         self.client.publish(
             mqqt_publication['topic'],
@@ -157,18 +157,18 @@ class Server(object):
                 qos == self.application_data[app_id]['subscriptions'][topic]:
 
             self.log.warning(
-                "[mqttasgi][channels][subscribe] - Subscription of {} to {}:{} already exists".format(app_id, topic,
+                "[mqttasgi][app][subscribe] - Subscription of {} to {}:{} already exists".format(app_id, topic,
                                                                                                       qos))
         self.application_data[app_id]['subscriptions'][topic] = qos
 
         if qos_diff > 0 and len(status['apps']) > 0:
             self.log.debug(
-                "[mqttasgi][channels][subscribe] - Subscription to {} must be updated to QOS: {}".format(topic, qos))
+                "[mqttasgi][app][subscribe] - Subscription to {} must be updated to QOS: {}".format(topic, qos))
             self.client.unsubscribe(topic)
             self.client.subscribe(topic, qos)
             status = (qos, status[1])
         elif len(status['apps']) == 0:
-            self.log.debug("[mqttasgi][channels][subscribe] - Subscription to {}:{}".format(topic, qos))
+            self.log.debug("[mqttasgi][app][subscribe] - Subscription to {}:{}".format(topic, qos))
             self.client.message_callback_add(topic, lambda client, userdata,
                                                            message: self._mqtt_receive(topic, message.topic,
                                                                                        message.payload,
@@ -177,7 +177,7 @@ class Server(object):
             status['qos'] = qos
         else:
             self.log.debug(
-                "[mqttasgi][channels][subscribe] - Subscription to {}:{} has {} listeners".format(topic, status['qos'],
+                "[mqttasgi][app][subscribe] - Subscription to {}:{} has {} listeners".format(topic, status['qos'],
                                                                                                   len(status['apps']) + 1))
         status['apps'].add(app_id)
         self.topics_subscription[topic] = status
@@ -186,38 +186,67 @@ class Server(object):
         mqqt_unsubscritpion = msg['mqtt']
         topic = mqqt_unsubscritpion['topic']
         if topic not in self.topics_subscription:
-            self.log.error("[mqttasgi][channels][unsubscribe] - Tried to unsubscribe from non existing topic {}".format(topic))
+            self.log.error("[mqttasgi][app][unsubscribe] - Tried to unsubscribe from non existing topic {}".format(topic))
             return
         status = self.topics_subscription[topic]
 
         if app_id not in self.topics_subscription[topic]['apps']:
             self.log.error(
-                "[mqttasgi][channels][unsubscribe] - App {} tried to unsubscribe from a topic it's not subsribed to {}"
+                "[mqttasgi][app][unsubscribe] - App {} tried to unsubscribe from a topic it's not subsribed to {}"
                     .format(app_id, topic))
             return
 
         if topic in self.application_data[app_id]['subscriptions']:
             del self.application_data[app_id]['subscriptions'][topic]
-            if len(self.application_data[app_id]['subscriptions'].keys()) == 0:
-                await self.delete_application(app_id)
+
 
         if len(status['apps']) == 1:
             self.client.unsubscribe(topic)
             self.client.message_callback_remove(topic)
             self.topics_subscription[topic] = {'qos': 0, 'apps': set()}
-            self.log.debug("[mqttasgi][channels][unsubscribe] - Unsubscribed from {}".format(topic))
+            self.log.debug("[mqttasgi][app][unsubscribe] - Unsubscribed from {}".format(topic))
         elif len(status['apps']) > 1:
             self.log.debug(
-                "[mqttasgi][channels][unsubscribe] - Subscription to {}:{} has {} listeners"
+                "[mqttasgi][app][unsubscribe] - Subscription to {}:{} has {} listeners"
                     .format(topic, status['qos'], len(status['apps']) - 1))
 
             self.topics_subscription[topic]['apps'].remove(app_id)
+
+    async def mqttasgi_worker_spawn(self, app_id, msg):
+        if app_id != 0:
+            self.log.error("[mqttasgi][app][worker.spawn] - Application {} tried to create a worker, not allowed!"
+                           .format(app_id))
+            return
+        new_app_id = msg['command']['app_id']
+        new_consumer_path = msg['command']['consumer_path']
+        new_consumer_params = msg['command']['consumer_params']
+        self.create_application(new_app_id, consumer_path=new_consumer_path,
+                                      consumer_parameters=new_consumer_params)
+
+        self.application_data[new_app_id]['receive'].put_nowait({
+            'type': 'mqtt.connect',
+            'mqtt': {
+
+            }
+        })
+        pass
+
+    async def mqttasgi_worker_kill(self, app_id, msg):
+        if app_id != 0:
+            self.log.error("[mqttasgi][app][worker.kill] - Application {} tried to kill a worker, not allowed!"
+                           .format(app_id))
+            return
+        new_app_id = msg['command']['app_id']
+        await self.delete_application(new_app_id)
+        pass
 
     async def _application_send(self, app_id, msg):
         action_map = {
             self.mqtt_type_pub: self.mqtt_publish,
             self.mqtt_type_sub: self.mqtt_subscribe,
             self.mqtt_type_usub: self.mqtt_unsubscribe,
+            'mqttasgi.worker.spawn': self.mqttasgi_worker_spawn,
+            'mqttasgi.worker.kill': self.mqttasgi_worker_kill,
         }
         try:
             await action_map[msg['type']](app_id, msg)
@@ -239,14 +268,22 @@ class Server(object):
             task.cancel()
         self.loop.stop()
 
-    def create_application(self, app_id, instance_type='worker'):
-        scope = {'app_id': app_id, 'instance_type': instance_type, **self.base_scope}
+    def create_application(self, app_id, instance_type='worker', consumer_path=None, consumer_parameters=None):
+        scope = {}
+        if consumer_parameters is not None:
+            scope = {**consumer_parameters}
+        scope = {**scope, **self.base_scope, 'app_id': app_id, 'instance_type': instance_type}
         if app_id in self.application_data:
-            self.log.error('[mqttasgi][subscribe][spawn] - Tried to create a fork with same ID,'
+            self.log.error('[mqttasgi][app][worker.spawn] - Tried to create a fork with same ID,'
                          ' ignoring! Verify your code!')
             return
+        if consumer_path is None:
+            application = self.application_type
+        else:
+            application = get_application(consumer_path)
         self.application_data[app_id] = {}
-        self.application_data[app_id]['instance'] = self.application_type(scope)
+        self.application_data[app_id]['instance'] = application(scope)
+
         self.application_data[app_id]['receive'] = asyncio.Queue()
         task = asyncio.ensure_future(
             self.application_data[app_id]['instance'](receive=self.application_data[app_id]['receive'].get,
@@ -258,17 +295,19 @@ class Server(object):
 
     async def delete_application(self, app_id):
         if app_id not in self.application_data:
-            self.log.error('[mqttasgi][unsubscribe][kill] - Tried to kill an instance that doesnt exist, ignoring! '
+            self.log.error('[mqttasgi][app][worker.kill] - Tried to kill an instance that doesnt exist, ignoring! '
                          'Verify your code!')
             return
+
         self.application_data[app_id]['receive'].put_nowait({
             'type': 'mqtt.disconnect',
             'mqtt': {
 
             }
         })
-        task = self.application_data[app_id]['task']
-        task.cancel()
+        for topic in [*self.application_data[app_id]['subscriptions']]:
+            await self.mqtt_unsubscribe(app_id, {'mqtt': {'topic': topic}})
+
         del self.application_data[app_id]
         if len(self.application_data.keys()) == 0:
             self.log.error('[mqttasgi][unsubscribe][kill] - All applications where killed, exiting!')

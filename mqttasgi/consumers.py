@@ -16,7 +16,7 @@ class MqttConsumer(AsyncConsumer):
 
     def __init__(self, scope):
         super().__init__(scope)
-        self.subscribed_topics = []
+        self.subscribed_topics = set()
 
     async def connect(self):
         pass
@@ -40,7 +40,7 @@ class MqttConsumer(AsyncConsumer):
 
     async def subscribe(self, topic, qos):
         if topic not in self.subscribed_topics:
-            self.subscribed_topics.append(topic)
+            self.subscribed_topics.add(topic)
 
         await self.send({
             'type': 'mqtt.sub',
@@ -72,21 +72,49 @@ class MqttConsumer(AsyncConsumer):
         mqtt_message = event['mqtt']
         await self.receive(mqtt_message)
 
+    async def spawn_worker(self, app_id, consumer_path, consumer_params):
+        mqttasgi_command = {
+            'type': 'mqttasgi.worker.spawn',
+            'command': {
+                'app_id': app_id,
+                'consumer_path': consumer_path,
+                'consumer_params': consumer_params
+            }
+        }
+        await self.send(mqttasgi_command)
+
+    async def kill_worker(self, app_id):
+        mqttasgi_command = {
+            'type': 'mqttasgi.worker.kill',
+            'command': {
+                'app_id': app_id
+            }
+        }
+        await self.send(mqttasgi_command)
+
 
 class TestMqttConsumer(MqttConsumer):
     async def connect(self):
         logger.debug('[mqttasgi][consumer][connect] - Connected!')
-        await self.subscribe('test', 2)
+        if self.scope['instance_type'] == 'master':
+            await self.subscribe('spawn', 2)
+            await self.subscribe('kill', 2)
+        else:
+            await self.subscribe(f'{self.scope["app_id"]}', 2)
+            await self.subscribe('workers', 2)
+            print(self.scope)
         self.count = 0
         pass
 
     async def receive(self, mqtt_message):
-        await self.publish('test2', 'Hola')
-        logger.debug(f'[mqttasgi][consumer][msg] - Received message {mqtt_message}')
-        self.count += 1
-        if self.count == 3:
-            logger.debug(f'[mqttasgi][consumer][msg] - After 3 messages unsubscribing')
-            await self.unsubscribe('test')
+        if self.scope['instance_type'] == 'master':
+            logger.debug(f'[mqttasgi][consumer][receive] - Received {mqtt_message["topic"]}:{mqtt_message["payload"]}')
+            if mqtt_message['topic'] == 'spawn':
+                await self.spawn_worker(mqtt_message['payload'].decode('utf-8'), 'mqttasgi.consumers:TestMqttConsumer', {'test': 'test'})
+            elif mqtt_message['topic'] == 'kill':
+                await self.kill_worker(mqtt_message['payload'].decode('utf-8'))
+        else:
+            logger.debug(f'[mqttasgi][consumer][receive] - Received {mqtt_message["topic"]}:{mqtt_message["payload"]}')
         pass
 
     async def disconnect(self):
