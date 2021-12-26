@@ -13,7 +13,7 @@ _logger = logging.getLogger(__name__)
 
 class Server(object):
     def __init__(self, application, host, port, username=None, password=None,
-                 client_id=None, mqtt_type_pub=None, mqtt_type_usub=None, mqtt_type_sub=None,
+                 client_id=2407, mqtt_type_pub=None, mqtt_type_usub=None, mqtt_type_sub=None,
                  mqtt_type_msg=None, connect_max_retries=3, logger=None):
 
         self.application_type = application
@@ -35,7 +35,8 @@ class Server(object):
             "server": self,
             "host": self.host,
             "port": self.port,
-        })
+        }, clean_session=False)
+        # self.client.enable_logger(self.log)
         self.username = username
         self.password = password
         self.client.on_connect = self._on_connect
@@ -45,6 +46,7 @@ class Server(object):
             self._mqtt_receive(-1, message.topic, message.payload, message.qos)
 
         self.topics_subscription = {}
+        self.topic_queues = {}
 
         self.mqtt_type_pub = mqtt_type_pub or "mqtt.pub"
         self.mqtt_type_sub = mqtt_type_sub or "mqtt.sub"
@@ -54,13 +56,17 @@ class Server(object):
     def _on_connect(self, client, userdata, flags, rc):
         self.log.info("[mqttasgi][connection][connected] - Connected to {}:{}".format(self.host, self.port))
         for app_id in self.application_data:
-            self.application_data[app_id]['receive'].put_nowait({
-                'type': 'mqtt.connect',
-                'mqtt': {
+            try:
+                self.application_data[app_id]['receive'].put_nowait({
+                    'type': 'mqtt.connect',
+                    'mqtt': {
 
-                }
-            })
-        pass
+                    }
+                })
+            except Exception as e:
+                self.log.error("[mqttasgi][mqtt][connect] - Cant add to queue"
+                               "of {}".format(app_id))
+                self.log.exception(e)
 
     def _on_disconnect(self, client, userdata, rc):
         self.log.warning("[mqttasgi][connection][disconnected] - Disconnected from {}:{}".format(self.host,self.port))
@@ -103,10 +109,19 @@ class Server(object):
     def _mqtt_receive(self, subscription, topic, payload, qos):
         if subscription == -1:
             self.log.warning("[mqttasgi][mqtt][receive] - Received message that no app is subscribed"
-                           " to topic:{}".format(topic))
+                           " to topic:{} adding to queue".format(topic))
+            if topic not in self.topic_queues:
+                self.topic_queues[topic] = []
+
+            self.topic_queues[topic] += [{
+                        'topic': topic,
+                        'payload': payload,
+                        'qos': qos
+                    }]
             return
-        try:
-            for app_id in self.topics_subscription[subscription]['apps']:
+
+        for app_id in self.topics_subscription[subscription]['apps']:
+            try:
                 self.application_data[app_id]['receive'].put_nowait({
                     'type': 'mqtt.msg',
                     'mqtt': {
@@ -115,11 +130,12 @@ class Server(object):
                         'qos': qos
                     }
                 })
-            self.log.debug("[mqttasgi][mqtt][receive] - Added message to queue app_ids:{} topic:{}".format(self.topics_subscription[subscription]['apps'], topic))
-        except Exception as e:
-            self.log.error("[mqttasgi][mqtt][receive] - Cant add to queue"
-                         "of {}".format(app_id))
-            self.log.exception(e)
+            except Exception as e:
+                self.log.error("[mqttasgi][mqtt][receive] - Cant add to queue"
+                               "of {}".format(app_id))
+                self.log.exception(e)
+        self.log.debug("[mqttasgi][mqtt][receive] - Added message to queue app_ids:{} topic:{}".format(self.topics_subscription[subscription]['apps'], topic))
+
 
     async def mqtt_receive_loop(self):
 
@@ -181,8 +197,30 @@ class Server(object):
                                                                                                   len(status['apps']) + 1))
         status['apps'].add(app_id)
         self.topics_subscription[topic] = status
+        flushed_topics = []
+        for msg_topic in self.topic_queues:
+            if mqtt.topic_matches_sub(topic, msg_topic):
+                self.log.info(
+                    "[mqttasgi][app][subscribe] - Flushing {} with {} messages"
+                        .format(msg_topic, len(self.topic_queues[msg_topic])))
+                while len(self.topic_queues[msg_topic]) > 0:
+                    msg = self.topic_queues[msg_topic].pop(0)
+                    try:
+                        self.application_data[app_id]['receive'].put_nowait({
+                            'type': 'mqtt.msg',
+                            'mqtt': msg
+                        })
+                    except Exception as e:
+                        self.log.error("[mqttasgi][mqtt][receive] - Cant add to queue"
+                                       "of {}".format(app_id))
+                        self.log.exception(e)
+                flushed_topics += [msg_topic]
 
-    async def mqtt_unsubscribe(self, app_id, msg):
+        for msg_topic in flushed_topics:
+            del self.topic_queues[msg_topic]
+
+
+    async def mqtt_unsubscribe(self, app_id, msg, soft=False):
         mqqt_unsubscritpion = msg['mqtt']
         topic = mqqt_unsubscritpion['topic']
         if topic not in self.topics_subscription:
@@ -201,10 +239,12 @@ class Server(object):
 
 
         if len(status['apps']) == 1:
-            self.client.unsubscribe(topic)
+            if not soft:
+                self.client.unsubscribe(topic)
             self.client.message_callback_remove(topic)
             self.topics_subscription[topic] = {'qos': 0, 'apps': set()}
-            self.log.debug("[mqttasgi][app][unsubscribe] - Unsubscribed from {}".format(topic))
+            self.log.debug("[mqttasgi][app][unsubscribe] - {} Unsubscribed from {}".format('Soft' if soft else '',
+                                                                                           topic))
         elif len(status['apps']) > 1:
             self.log.debug(
                 "[mqttasgi][app][unsubscribe] - Subscription to {}:{} has {} listeners"
@@ -249,8 +289,14 @@ class Server(object):
             'mqttasgi.worker.kill': self.mqttasgi_worker_kill,
         }
         try:
-            await action_map[msg['type']](app_id, msg)
+            if app_id not in self.application_data:
+                self.log.warning("[mqttasgi][app][send] - Application {} does not exist!"
+                               .format(app_id))
+            else:
+                await action_map[msg['type']](app_id, msg)
         except Exception as e:
+            self.log.error("[mqttasgi][app][send] - Exception "
+                           "of {}".format(app_id))
             self.log.exception(e)
 
     def stop_server(self, signum):
@@ -305,13 +351,19 @@ class Server(object):
 
             }
         })
+        # Apps can decide whether to unsubscribe or not, to mantain a queue of messages in the broker
         for topic in [*self.application_data[app_id]['subscriptions']]:
-            await self.mqtt_unsubscribe(app_id, {'mqtt': {'topic': topic}})
+            await self.mqtt_unsubscribe(app_id, {'mqtt': {'topic': topic}}, soft=True)
 
         del self.application_data[app_id]
         if len(self.application_data.keys()) == 0:
             self.log.error('[mqttasgi][unsubscribe][kill] - All applications where killed, exiting!')
             self.stop_server('no-apps')
+
+    def handle_exception(self, loop, context):
+        # context["message"] will always be there; but context["exception"] may not
+        msg = context.get("exception", context["message"])
+        self.log.info(f"Caught exception: {msg}")
 
     def run(self):
         self.stop = False
@@ -323,7 +375,7 @@ class Server(object):
                 getattr(signal, signame),
                 functools.partial(self.stop_server, signame)
             )
-
+        # loop.set_exception_handler(self.handle_exception)
         self.log.info("MQTTASGI initialized. The complete MQTT ASGI protocol server.")
         self.log.info("MQTTASGI Event loops running forever, press Ctrl+C to interrupt.")
         self.log.info("pid %s: send SIGINT or SIGTERM to exit." % os.getpid())
