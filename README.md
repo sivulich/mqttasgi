@@ -11,19 +11,20 @@ mqttasgi is an ASGI protocol server that implements a complete interface for MQT
 # Instalation
 To install mqttasgi
 ```bash
-    pip install mqttasgi
+pip install mqttasgi
 ```
 
 # Usage
 Mqttasgi provides a cli interface to run the protocol server. 
 ```bash
-    mqttasgi -H localhost -p 1883 my_application.asgi:application
+mqttasgi -H localhost -p 1883 my_application.asgi:application
 ```
 Parameters:
 | Parameter   | Explanaation      |
 |-------------|:-----------------:|
 | -H / --host | MQTT broker host |
 | -p / --port | MQTT broker port |
+| -c / --cleansession | MQTT Clean Session |
 | -v / --verbosity | Logging verbosity |
 | -U / --username | MQTT Username |
 | -P / --password | MQTT Password |
