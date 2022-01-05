@@ -1,5 +1,5 @@
 # mqttasgi - MQTT ASGI Protocol Server for Django
-mqttasgi is an ASGI protocol server that implements a complete interface for MQTT for the Django development framework.
+mqttasgi is an ASGI protocol server that implements a complete interface for MQTT for the Django development framework. Built following [daphne](https://github.com/django/daphne) protocol server.
 
 # Features
 - Publish / Subscribe to any topic
@@ -7,6 +7,7 @@ mqttasgi is an ASGI protocol server that implements a complete interface for MQT
 - Full Django ORM support within consumers.
 - Full testing consumer to enable TDD.
 - Lightweight.
+- Django 2.x / Channels 2.x support
 
 # Instalation
 To install mqttasgi
