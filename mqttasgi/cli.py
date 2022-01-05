@@ -5,12 +5,14 @@ from .utils import get_application
 
 logger = logging.getLogger(__name__)
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description="MQTT ASGI Protocol Server")
     parser.add_argument("-H", "--host", help="MQTT broker host",
                         default="localhost")
     parser.add_argument("-p", "--port", help="MQTT broker port", type=int,
                         default=1883)
+    parser.add_argument("-c", "--cleansession", help="MQTT Clean Session", type=bool,
+                        default=True)
     parser.add_argument("-v", "--verbosity", type=int, default=0,
                         help="Set verbosity")
     parser.add_argument("-U", "--username", help="MQTT username to authorised connection")
@@ -40,7 +42,11 @@ if __name__ == '__main__':
         args.username,
         args.password,
         args.client_id,
-        logger=logger
+        logger=logger,
+        clean_session=args.cleansession
     )
 
     server.run()
+
+if __name__ == '__main__':
+    main()
