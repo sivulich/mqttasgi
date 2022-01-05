@@ -14,7 +14,7 @@ _logger = logging.getLogger(__name__)
 class Server(object):
     def __init__(self, application, host, port, username=None, password=None,
                  client_id=2407, mqtt_type_pub=None, mqtt_type_usub=None, mqtt_type_sub=None,
-                 mqtt_type_msg=None, connect_max_retries=3, logger=None):
+                 mqtt_type_msg=None, connect_max_retries=3, logger=None, clean_session=True):
 
         self.application_type = application
         self.application_data = {}
@@ -35,7 +35,7 @@ class Server(object):
             "server": self,
             "host": self.host,
             "port": self.port,
-        }, clean_session=False)
+        }, clean_session=clean_session)
         # self.client.enable_logger(self.log)
         self.username = username
         self.password = password
