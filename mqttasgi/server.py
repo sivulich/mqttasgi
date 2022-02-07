@@ -369,12 +369,16 @@ class Server(object):
         self.stop = False
         loop = asyncio.get_event_loop()
         self.loop = loop
+        running_on_windows = False
 
-        for signame in ('SIGINT', 'SIGTERM'):
-            loop.add_signal_handler(
-                getattr(signal, signame),
-                functools.partial(self.stop_server, signame)
-            )
+        try:
+            for signame in ('SIGINT', 'SIGTERM'):
+                loop.add_signal_handler(
+                    getattr(signal, signame),
+                    functools.partial(self.stop_server, signame)
+                )
+        except NotImplementedError:
+            running_on_windows = True
         # loop.set_exception_handler(self.handle_exception)
         self.log.info("MQTTASGI initialized. The complete MQTT ASGI protocol server.")
         self.log.info("MQTTASGI Event loops running forever, press Ctrl+C to interrupt.")
@@ -386,6 +390,9 @@ class Server(object):
 
         try:
             loop.run_forever()
+        except KeyboardInterrupt:
+            if running_on_windows is True:
+                self.stop_server()
         finally:
             loop.run_until_complete(loop.shutdown_asyncgens())
             loop.close()
