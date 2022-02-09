@@ -14,8 +14,7 @@ logger = logging.getLogger(__name__)
 
 class MqttConsumer(AsyncConsumer):
 
-    def __init__(self, scope):
-        super().__init__(scope)
+    def __init__(self):
         self.subscribed_topics = set()
 
     async def connect(self):
