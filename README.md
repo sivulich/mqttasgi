@@ -42,7 +42,7 @@ from channels.routing import ProtocolTypeRouter
 from my_application.consumers import MyMqttConsumer
 from django.core.asgi import get_asgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'integrator_mqtt.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'my_application.settings')
 
 django.setup()
 
@@ -69,3 +69,17 @@ class MyMqttConsumer(MqttConsumer):
         await self.unsubscribe('my/testing/topic')
     
 ```
+
+# Supporters
+
+## MAPER - IIOT Asset Monitoring - [Webpage](https://home.mapertech.com/en/)
+
+![Maper Logo](https://media-exp1.licdn.com/dms/image/C4D0BAQEi2zH7bSXq8A/company-logo_200_200/0/1529507408740?e=2147483647&v=beta&t=XVIxvlp41JE8_YnwwDNcGlnu7VVanxPGICNoGboHyTY)
+
+Predict failures before they happen.
+
+Real time health monitoring to avoid unexpected downtimes and organize maintenance in industrial plants.
+
+Combining IoT Technology and Artificial Intelligence, we deliver a complete view of your assets like never before. 
+
+With real time health diagnostics you will increase the reliability of the whole production process, benefitting both the company and it's staff.
