@@ -7,6 +7,7 @@ import signal
 import json
 import paho.mqtt.client as mqtt
 from .utils import get_application
+import sys
 
 _logger = logging.getLogger(__name__)
 
@@ -310,8 +311,12 @@ class Server(object):
                 }
             })
         self.stop = True
-        for task in asyncio.Task.all_tasks():
-            task.cancel()
+        if sys.version_info[1] < 7:
+            for task in asyncio.Task.all_tasks():
+                task.cancel()
+        else:
+            for task in asyncio.all_tasks():
+                task.cancel()
         self.loop.stop()
 
     def create_application(self, app_id, instance_type='worker', consumer_path=None, consumer_parameters=None):
@@ -328,13 +333,13 @@ class Server(object):
         else:
             application = get_application(consumer_path)
         self.application_data[app_id] = {}
-        self.application_data[app_id]['instance'] = application(scope)
-
         self.application_data[app_id]['receive'] = asyncio.Queue()
+        self.application_data[app_id]['instance'] = application(scope,
+                                                                receive=self.application_data[app_id]['receive'].get,
+                                                                send=lambda message: self._application_send(app_id, message))
         task = asyncio.ensure_future(
-            self.application_data[app_id]['instance'](receive=self.application_data[app_id]['receive'].get,
-                                               send=lambda message: self._application_send(app_id, message)),
-
+            self.application_data[app_id]['instance'],
+            loop=asyncio.get_event_loop()
         )
         self.application_data[app_id]['task'] = task
         self.application_data[app_id]['subscriptions'] = {}
@@ -369,7 +374,6 @@ class Server(object):
         self.stop = False
         loop = asyncio.get_event_loop()
         self.loop = loop
-        running_on_windows = False
 
         try:
             for signame in ('SIGINT', 'SIGTERM'):
@@ -378,7 +382,8 @@ class Server(object):
                     functools.partial(self.stop_server, signame)
                 )
         except NotImplementedError:
-            running_on_windows = True
+            # Running on windows
+            pass
         # loop.set_exception_handler(self.handle_exception)
         self.log.info("MQTTASGI initialized. The complete MQTT ASGI protocol server.")
         self.log.info("MQTTASGI Event loops running forever, press Ctrl+C to interrupt.")
@@ -390,9 +395,6 @@ class Server(object):
 
         try:
             loop.run_forever()
-        except KeyboardInterrupt:
-            if running_on_windows is True:
-                self.stop_server()
         finally:
             loop.run_until_complete(loop.shutdown_asyncgens())
             loop.close()

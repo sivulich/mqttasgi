@@ -7,13 +7,15 @@ mqttasgi is an ASGI protocol server that implements a complete interface for MQT
 - Full Django ORM support within consumers.
 - Full testing consumer to enable TDD.
 - Lightweight.
-- Django 2.x / Channels 2.x support
+- Django 3.x, 4.x / Channels 3.x support
 
 # Instalation
-To install mqttasgi
+To install mqttasgi for Django 3.x, 4.x
 ```bash
 pip install mqttasgi
 ```
+
+**IMPORTANT NOTE:** If legacy support for Django 2.x is required install latest 0.x mqttasgi.
 
 # Usage
 Mqttasgi provides a cli interface to run the protocol server. 
@@ -21,7 +23,7 @@ Mqttasgi provides a cli interface to run the protocol server.
 mqttasgi -H localhost -p 1883 my_application.asgi:application
 ```
 Parameters:
-| Parameter   | Explanaation      |
+| Parameter   | Explanation      |
 |-------------|:-----------------:|
 | -H / --host | MQTT broker host |
 | -p / --port | MQTT broker port |
@@ -32,14 +34,21 @@ Parameters:
 | -i / --id | MQTT Client ID |
 | Last argument | ASGI Apllication |
 
-To add your consumer to the routing in your django application:
+To add your consumer to the `asgi.py` file in your django application:
 ```python
-    application = ProtocolTypeRouter({
-      'websocket': AllowedHostsOriginValidator(URLRouter([
-          url('.*', WebsocketConsumer)
-      ])),
-      'mqtt': MqttConsumer,
-      ....
+import os
+import django
+from channels.routing import ProtocolTypeRouter
+from my_application.consumers import MyMqttConsumer
+from django.core.asgi import get_asgi_application
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'integrator_mqtt.settings')
+
+django.setup()
+
+application = ProtocolTypeRouter({
+        'http': get_asgi_application(),
+        'mqtt': MyMqttConsumer.as_asgi(),
     })
 ```    
 Your consumer should inherit from MqttConsumer in mqttasgi.consumers. It implements helper functions such as publish and subscribe. A simple example:
@@ -51,7 +60,7 @@ class MyMqttConsumer(MqttConsumer):
         await self.subscribe('my/testing/topic', 2)
 
     async def receive(self, mqtt_message):
-        print('Received a message at topic:', mqtt_mesage['topic'])
+        print('Received a message at topic:', mqtt_message['topic'])
         print('With payload', mqtt_message['payload'])
         print('And QOS:', mqtt_message['qos'])
         pass
