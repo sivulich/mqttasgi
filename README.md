@@ -5,6 +5,7 @@ mqttasgi is an ASGI protocol server that implements a complete interface for MQT
 - Publish / Subscribe to any topic
 - Multiple workers to handle different topics / subscriptions.
 - Full Django ORM support within consumers.
+- Full Channel Layers support.
 - Full testing consumer to enable TDD.
 - Lightweight.
 - Django 3.x, 4.x / Channels 3.x support
@@ -18,6 +19,7 @@ pip install mqttasgi
 **IMPORTANT NOTE:** If legacy support for Django 2.x is required install latest 0.x mqttasgi.
 
 # Usage
+## Unit
 Mqttasgi provides a cli interface to run the protocol server. 
 ```bash
 mqttasgi -H localhost -p 1883 my_application.asgi:application
@@ -33,6 +35,8 @@ Parameters:
 | -P / --password | MQTT Password |
 | -i / --id | MQTT Client ID |
 | Last argument | ASGI Apllication |
+
+## Consumer
 
 To add your consumer to the `asgi.py` file in your django application:
 ```python
@@ -68,6 +72,38 @@ class MyMqttConsumer(MqttConsumer):
     async def disconnect(self):
         await self.unsubscribe('my/testing/topic')
     
+```
+## Channel Layers
+MQTTAsgi supports channel layer communications and group messages. It follows the [Channel Layers](https://channels.readthedocs.io/en/stable/topics/channel_layers.html) implementation:
+
+Outside of the consumer:
+```python
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+channel_layer = get_channel_layer()
+async_to_sync(channel_layer.group_send)("my.group", {"type": "my.custom.message", "text":"Hi from outside of the consumer"})
+```
+In the consumer:
+```python
+from mqttasgi.consumers import MqttConsumer
+class MyMqttConsumer(MqttConsumer):
+
+    async def connect(self):
+        await self.subscribe('my/testing/topic', 2)
+        await self.channel_layer.group_add("my.group", self.channel_name)
+
+    async def receive(self, mqtt_message):
+        print('Received a message at topic:', mqtt_message['topic'])
+        print('With payload', mqtt_message['payload'])
+        print('And QOS:', mqtt_message['qos'])
+        pass
+    
+    async def my_custom_message(self, event):
+        print('Received a channel layer message')
+        print(event)
+
+    async def disconnect(self):
+        await self.unsubscribe('my/testing/topic')
 ```
 
 # Supporters
