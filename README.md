@@ -73,6 +73,58 @@ class MyMqttConsumer(MqttConsumer):
         await self.unsubscribe('my/testing/topic')
     
 ```
+## Consumer API
+
+### MQTT
+
+The consumer provides a full API to interact with MQTT and with the channel layer:
+
+
+#### Publish
+
+Publishes a message to the MQTT topic passed as argument with the given payload. The QOS of the message or retain flagged can be also passed as aditional arguments.
+
+```python   
+
+await self.publish(topic, payload, qos=1, retain=False)
+```
+
+#### Subscribe
+
+Subscribes to the MQTT topic passed as argument with the given QOS.
+
+```python
+await self.subscribe(topic, qos)
+```
+
+#### Unsubscribe
+
+Unsubscribes from the given MQTT topic.
+
+```python
+await self.unsubscribe(topic)
+```
+
+### Worker API - Experimental
+
+This is an advanced functionality of the MQTTAsgi protocol server that allows the user to run multiple consumers on the same mqttasgi instance.
+
+#### Spawn Worker
+
+The `app_id` is a unique identifier for the worker, the `consumer_path` is the dot separated path to the consumer and `consumer_params` is the parameter dictonary to pass down to the new consumer.
+
+```python
+await self.spawn_worker(app_id, consumer_path, consumer_params)
+```
+
+#### Kill Worker
+
+The consumer can also kill the spawned workers with a specific `app_id`:
+```python
+await self.kill_worker(self, app_id)
+```
+
+
 ## Channel Layers
 MQTTAsgi supports channel layer communications and group messages. It follows the [Channel Layers](https://channels.readthedocs.io/en/stable/topics/channel_layers.html) implementation:
 
@@ -105,6 +157,7 @@ class MyMqttConsumer(MqttConsumer):
     async def disconnect(self):
         await self.unsubscribe('my/testing/topic')
 ```
+
 
 # Supporters
 

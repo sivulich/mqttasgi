@@ -3,3 +3,4 @@ dist/*
 mqttasgi.egg-info/*
 .DS_Store
 .idea
+venv/

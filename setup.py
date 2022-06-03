@@ -23,6 +23,8 @@ setup(
     include_package_data=True,
     install_requires=[
         "paho-mqtt",
+        "django",
+        "channels",
     ],
     entry_points={
         "console_scripts": [
