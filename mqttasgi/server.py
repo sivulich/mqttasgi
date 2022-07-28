@@ -15,7 +15,7 @@ _logger = logging.getLogger(__name__)
 class Server(object):
     def __init__(self, application, host, port, username=None, password=None,
                  client_id=2407, mqtt_type_pub=None, mqtt_type_usub=None, mqtt_type_sub=None,
-                 mqtt_type_msg=None, connect_max_retries=3, logger=None, clean_session=True):
+                 mqtt_type_msg=None, connect_max_retries=3, logger=None, clean_session=True, cert=None, key=None, ca_cert=None):
 
         self.application_type = application
         self.application_data = {}
@@ -40,6 +40,10 @@ class Server(object):
         # self.client.enable_logger(self.log)
         self.username = username
         self.password = password
+        # certificates
+        self.cert = cert
+        self.key = key
+        self.ca_cert = ca_cert
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.connect_max_retries = connect_max_retries
@@ -142,6 +146,14 @@ class Server(object):
 
         if self.username:
             self.client.username_pw_set(username=self.username, password=self.password)
+            
+        if all([self.cert, self.key, self.ca_cert]):
+            self.client.tls_set(
+                ca_certs=self.ca_cert,
+                certfile=self.cert,
+                keyfile=self.key,
+            )
+
 
         self.client.connect(self.host, self.port)
 

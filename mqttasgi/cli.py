@@ -18,6 +18,10 @@ def main():
     parser.add_argument("-U", "--username", help="MQTT username to authorised connection")
     parser.add_argument("-P", "--password", help="MQTT password to authorised connection")
     parser.add_argument("-i", "--id", dest="client_id", help="MQTT Client ID")
+    # add support for certificate authentication (TLS)
+    parser.add_argument("-C", "--cert", help="MQTT TLS certificate", default=None)
+    parser.add_argument("-K", "--key", help="MQTT TLS key", default=None)
+    parser.add_argument("-S", "--cacert", help="MQTT TLS CA certificate", default=None)
 
     parser.add_argument("application",
                         help=("The ASGI application instance to use as "
@@ -43,7 +47,10 @@ def main():
         args.password,
         args.client_id,
         logger=logger,
-        clean_session=args.cleansession
+        clean_session=args.cleansession,
+        cert=args.cert,
+        key=args.key,
+        ca_cert=args.cacert,
     )
 
     server.run()
