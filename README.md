@@ -34,6 +34,9 @@ Parameters:
 | -U / --username | MQTT Username |
 | -P / --password | MQTT Password |
 | -i / --id | MQTT Client ID |
+| -C / --cert | TLS Certificate |
+| -K / --key | TLS Key |
+| -S / --cacert | TLS CA Certificate |
 | Last argument | ASGI Apllication |
 
 ## Consumer
