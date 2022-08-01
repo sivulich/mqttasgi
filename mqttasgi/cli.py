@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 from .server import Server
 from .utils import get_application
 
@@ -8,20 +9,26 @@ logger = logging.getLogger(__name__)
 def main():
     parser = argparse.ArgumentParser(description="MQTT ASGI Protocol Server")
     parser.add_argument("-H", "--host", help="MQTT broker host",
-                        default="localhost")
+                        default=os.environ.get("MQTT_HOSTNAME", "localhost"))
     parser.add_argument("-p", "--port", help="MQTT broker port", type=int,
-                        default=1883)
+                        default=int(os.environ.get("MQTT_PORT", 1883)))
     parser.add_argument("-c", "--cleansession", help="MQTT Clean Session", type=bool,
-                        default=True)
-    parser.add_argument("-v", "--verbosity", type=int, default=0,
-                        help="Set verbosity")
-    parser.add_argument("-U", "--username", help="MQTT username to authorised connection")
-    parser.add_argument("-P", "--password", help="MQTT password to authorised connection")
-    parser.add_argument("-i", "--id", dest="client_id", help="MQTT Client ID")
+                        default=os.environ.get("MQTT_CLEAN", "True").lower() == "true")
+    parser.add_argument("-v", "--verbosity", type=int, help="Set verbosity",
+                        default=int(os.environ.get("VERBOSITY", 0)))
+    parser.add_argument("-U", "--username", help="MQTT username to authorised connection",
+                        default=os.environ.get("MQTT_USERNAME", None))
+    parser.add_argument("-P", "--password", help="MQTT password to authorised connection",
+                        default=os.environ.get("MQTT_PASSWORD", None))
+    parser.add_argument("-i", "--id", dest="client_id", help="MQTT Client ID",
+                        default=os.environ.get("MQTT_CLIENT_ID", None))
     # add support for certificate authentication (TLS)
-    parser.add_argument("-C", "--cert", help="MQTT TLS certificate", default=None)
-    parser.add_argument("-K", "--key", help="MQTT TLS key", default=None)
-    parser.add_argument("-S", "--cacert", help="MQTT TLS CA certificate", default=None)
+    parser.add_argument("-C", "--cert", help="MQTT TLS certificate",
+                        default=os.environ.get("TLS_CERT", None))
+    parser.add_argument("-K", "--key", help="MQTT TLS key",
+                        default=os.environ.get("TLS_KEY", None))
+    parser.add_argument("-S", "--cacert", help="MQTT TLS CA certificate",
+                        default=os.environ.get("TLS_CA", None))
 
     parser.add_argument("application",
                         help=("The ASGI application instance to use as "
