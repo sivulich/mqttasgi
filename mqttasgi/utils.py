@@ -9,4 +9,6 @@ def get_application(application_name):
     for bit in object_path.split("."):
         application = getattr(application, bit)
 
+    if hasattr(application, "as_asgi"):
+        return application.as_asgi()
     return application
