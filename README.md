@@ -25,19 +25,21 @@ Mqttasgi provides a cli interface to run the protocol server.
 mqttasgi -H localhost -p 1883 my_application.asgi:application
 ```
 Parameters:
-| Parameter   | Explanation      |
-|-------------|:-----------------:|
-| -H / --host | MQTT broker host |
-| -p / --port | MQTT broker port |
-| -c / --cleansession | MQTT Clean Session |
-| -v / --verbosity | Logging verbosity |
-| -U / --username | MQTT Username |
-| -P / --password | MQTT Password |
-| -i / --id | MQTT Client ID |
-| -C / --cert | TLS Certificate |
-| -K / --key | TLS Key |
-| -S / --cacert | TLS CA Certificate |
-| Last argument | ASGI Apllication |
+| Parameter   | Explanation      | Environment variable |
+|-------------|------------------|:--------------------:|
+| -H / --host | MQTT broker host | MQTT_HOSTNAME |
+| -p / --port | MQTT broker port | MQTT_PORT |
+| -c / --cleansession | MQTT Clean Session | MQTT_CLEAN |
+| -v / --verbosity | Logging verbosity | VERBOSITY |
+| -U / --username | MQTT Username | MQTT_USERNAME |
+| -P / --password | MQTT Password | MQTT_PASSWORD |
+| -i / --id | MQTT Client ID | MQTT_CLIENT_ID |
+| -C / --cert | TLS Certificate | TLS_CERT |
+| -K / --key | TLS Key | TLS_KEY |
+| -S / --cacert | TLS CA Certificate | TLS_CA |
+| Last argument | ASGI Apllication |  |
+
+Environment variables are supported and can be set using a `.env` file on the root of the project, but passing a parameter overrides this value.
 
 ## Consumer
 

@@ -3,6 +3,9 @@ import logging
 import os
 from .server import Server
 from .utils import get_application
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 

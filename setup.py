@@ -25,6 +25,7 @@ setup(
         "paho-mqtt",
         "django",
         "channels",
+        "python-dotenv"
     ],
     entry_points={
         "console_scripts": [
