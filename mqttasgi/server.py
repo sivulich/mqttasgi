@@ -146,7 +146,7 @@ class Server(object):
 
         if self.username:
             self.client.username_pw_set(username=self.username, password=self.password)
-            
+
         if all([self.cert, self.key, self.ca_cert]):
             self.client.tls_set(
                 ca_certs=self.ca_cert,
@@ -312,24 +312,23 @@ class Server(object):
                            "of {}".format(app_id))
             self.log.exception(e)
 
-    def stop_server(self, signum):
-        self.log.warning("MQTTASGI Received signal {}, terminating".format(signum))
-        # self.log.warning("Leaving consumers a second to exit gracefully")
+    async def shutdown(self, signum):
+        """Cleanup tasks tied to the service's shutdown."""
+        self.log.warning(f"MQTTASGI Received signal {signum}, terminating")
+        self.stop=True
         for app_id in self.application_data:
-            self.application_data[app_id]['receive'].put_nowait({
-                'type': 'mqtt.disconnect',
-                'mqtt': {
-
-                }
-            })
-        self.stop = True
-        if sys.version_info[1] < 7:
-            for task in asyncio.Task.all_tasks():
-                task.cancel()
-        else:
-            for task in asyncio.all_tasks():
-                task.cancel()
+            self.application_data[app_id]["receive"].put_nowait(
+                {"type": "mqtt.disconnect"}
+            )
+        self.log.warning("MQTTASGI Waiting for all applications to close")
+        await asyncio.gather(*[self.application_data[app_id]["task"] for app_id in self.application_data])
+        all_tasks = asyncio.Task.all_tasks if sys.version_info[1] < 7 else asyncio.all_tasks
+        tasks = [t for t in all_tasks() if t is not asyncio.current_task()]
+        self.log.info(f"Cancelling {len(tasks)} outstanding tasks")
+        [task.cancel() for task in tasks]
         self.loop.stop()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        self.log.info("Shutdown complete")
 
     def create_application(self, app_id, instance_type='worker', consumer_path=None, consumer_parameters=None):
         scope = {}
@@ -374,8 +373,10 @@ class Server(object):
 
         del self.application_data[app_id]
         if len(self.application_data.keys()) == 0:
-            self.log.error('[mqttasgi][unsubscribe][kill] - All applications where killed, exiting!')
-            self.stop_server('no-apps')
+            self.log.error(
+                "[mqttasgi][unsubscribe][kill] - All applications where killed, exiting!"
+            )
+            await self.shutdown("no-apps")
 
     def handle_exception(self, loop, context):
         # context["message"] will always be there; but context["exception"] may not
@@ -391,7 +392,7 @@ class Server(object):
             for signame in ('SIGINT', 'SIGTERM'):
                 loop.add_signal_handler(
                     getattr(signal, signame),
-                    functools.partial(self.stop_server, signame)
+                    lambda signame=signame: asyncio.create_task(self.shutdown(signame)),
                 )
         except NotImplementedError:
             # Running on windows
@@ -410,5 +411,4 @@ class Server(object):
         finally:
             loop.run_until_complete(loop.shutdown_asyncgens())
             loop.close()
-
-        self.client.disconnect()
+            self.client.disconnect()
