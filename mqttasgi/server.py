@@ -108,12 +108,8 @@ class Server(object):
                 client.reconnect()
                 self.log.warning("[mqttasgi][connection][reconnect] - Reconnected after {} attempts".format(tries))
                 break
-            except KeyboardInterrupt as e:
-                self.log.warning("[mqttasgi][connection][reconnect] - Keyboard Interrupt. Stopped trying to reconnect.")
-                raise e
             except Exception as e:
                 self.log.debug("[mqttasgi][connection][reconnect] - Exception occurred during reconnect", exc_info=True)
-
 
     def _mqtt_receive(self, subscription, topic, payload, qos):
         if subscription == -1:
@@ -163,8 +159,8 @@ class Server(object):
 
         self.log.info(f"MQTT loop start")
 
+        self.client.loop_start()
         while True:
-            self.client.loop(0.01)
             await asyncio.sleep(0.01)
 
     async def mqtt_publish(self, app_id, msg):
