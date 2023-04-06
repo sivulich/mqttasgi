@@ -32,6 +32,8 @@ def main():
                         default=os.environ.get("TLS_KEY", None))
     parser.add_argument("-S", "--cacert", help="MQTT TLS CA certificate",
                         default=os.environ.get("TLS_CA", None))
+    parser.add_argument("-r", "--retries", help="Maximum number of connection retries after unexpected disconnect (0 to always try to reconnect)",
+                        default=os.environ.get("MQTT_RETRIES", 3), type=int)
 
     parser.add_argument("application",
                         help=("The ASGI application instance to use as "
@@ -61,6 +63,7 @@ def main():
         cert=args.cert,
         key=args.key,
         ca_cert=args.cacert,
+        connect_max_retries=args.retries
     )
 
     server.run()
