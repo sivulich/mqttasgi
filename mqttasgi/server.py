@@ -79,12 +79,15 @@ class Server(object):
         if not self.stop:
             self._handle_reconnect()
 
-    def _handle_reconnect(self):
+    def _handle_reconnect(self, on_connect=False):
         tries = 0
         while tries < self.connect_max_retries or self.connect_max_retries == 0:
             self.log.info("[mqttasgi][connection][reconnect] - Attempting {} reconnect".format(tries))
             try:
-                client.reconnect()
+                if on_connect is False:
+                    self.client.reconnect()
+                else:
+                    self.client.connect(self.host, self.port)
                 self.log.warning("[mqttasgi][connection][reconnect] - Reconnected after {} attempts".format(tries))
                 break
             except KeyboardInterrupt as e:
@@ -151,7 +154,7 @@ class Server(object):
             self.client.connect(self.host, self.port)
         except Exception as e:
             try:
-                self._handle_reconnect()
+                self._handle_reconnect(on_connect=True)
             except Exception as e:
                 await self.shutdown('CONNECTION_ERROR')
 
