@@ -37,7 +37,8 @@ class Server(object):
             "host": self.host,
             "port": self.port,
         }, clean_session=clean_session)
-        # self.client.enable_logger(self.log)
+
+        self.client.enable_logger(self.log)
         self.username = username
         self.password = password
         # certificates
@@ -76,20 +77,25 @@ class Server(object):
     def _on_disconnect(self, client, userdata, rc):
         self.log.warning("[mqttasgi][connection][disconnected] - Disconnected from {}:{}".format(self.host, self.port))
         if not self.stop:
-            if self.connect_max_retries != 0:
-                for i in range(1, self.connect_max_retries):
-                    self.log.info("[mqttasgi][connection][reconnect] - Attempting {} reconnect".format(i))
-                    try:
-                        client.reconnect()
-                        self.log.warning("[mqttasgi][connection][reconnect] - Reconnected after {} attempts".format(i))
-                        break
-                    except Exception as e:
-                        self.log.debug("[mqttasgi][connection][reconnect] - Exception occurred during reconnect", exc_info=True)
-                        time.sleep(i)
-                else:  # executed only if the for-loop completes without a break
-                    self._handle_reconnect_failure()
-            else:
-                self._try_reconnect_infinitely(client)
+            self._handle_reconnect()
+
+    def _handle_reconnect(self):
+        tries = 0
+        while tries < self.connect_max_retries or self.connect_max_retries == 0:
+            self.log.info("[mqttasgi][connection][reconnect] - Attempting {} reconnect".format(tries))
+            try:
+                client.reconnect()
+                self.log.warning("[mqttasgi][connection][reconnect] - Reconnected after {} attempts".format(tries))
+                break
+            except KeyboardInterrupt as e:
+                self.log.warning("[mqttasgi][connection][reconnect] - Keyboard Interrupt. Stopped trying to reconnect.")
+                raise e
+            except Exception as e:
+                self.log.debug("[mqttasgi][connection][reconnect] - Exception occurred during reconnect", exc_info=True)
+                time.sleep(min(tries,30))
+            tries += 1
+        else:  # executed only if the for-loop completes without a break
+            self._handle_reconnect_failure()
 
     def _handle_reconnect_failure(self):
         for app_id in self.application_data:
@@ -98,18 +104,6 @@ class Server(object):
                 'mqtt': {}
             })
         raise Exception("[mqttasgi][connection][reconnect] - Failed to reconnect after {} attempts".format(self.connect_max_retries))
-
-    def _try_reconnect_infinitely(self, client):
-        tries = 0
-        while True:
-            try:
-                time.sleep(min(tries, 10))
-                tries += 1
-                client.reconnect()
-                self.log.warning("[mqttasgi][connection][reconnect] - Reconnected after {} attempts".format(tries))
-                break
-            except Exception as e:
-                self.log.debug("[mqttasgi][connection][reconnect] - Exception occurred during reconnect", exc_info=True)
 
     def _mqtt_receive(self, subscription, topic, payload, qos):
         if subscription == -1:
@@ -141,7 +135,6 @@ class Server(object):
                 self.log.exception(e)
         self.log.debug("[mqttasgi][mqtt][receive] - Added message to queue app_ids:{} topic:{}".format(self.topics_subscription[subscription]['apps'], topic))
 
-
     async def mqtt_receive_loop(self):
 
         if self.username:
@@ -154,14 +147,22 @@ class Server(object):
                 keyfile=self.key,
             )
 
-
-        self.client.connect(self.host, self.port)
+        try:
+            self.client.connect(self.host, self.port)
+        except Exception as e:
+            try:
+                self._handle_reconnect()
+            except Exception as e:
+                await self.shutdown('CONNECTION_ERROR')
 
         self.log.info(f"MQTT loop start")
 
-        self.client.loop_start()
-        while True:
-            await asyncio.sleep(0.01)
+        try:
+            while not self.stop:
+                self.client.loop(timeout=0.01)
+                await asyncio.sleep(0.01)
+        except Exception as e:
+            await self.shutdown('Exception in receive loop')
 
     async def mqtt_publish(self, app_id, msg):
         mqqt_publication = msg['mqtt']
@@ -231,7 +232,6 @@ class Server(object):
 
         for msg_topic in flushed_topics:
             del self.topic_queues[msg_topic]
-
 
     async def mqtt_unsubscribe(self, app_id, msg, soft=False):
         mqqt_unsubscritpion = msg['mqtt']
@@ -326,9 +326,10 @@ class Server(object):
         tasks = [t for t in all_tasks() if t is not asyncio.current_task()]
         self.log.info(f"Cancelling {len(tasks)} outstanding tasks")
         [task.cancel() for task in tasks]
-        self.loop.stop()
+        self.client.loop_stop()
         await asyncio.gather(*tasks, return_exceptions=True)
         self.log.info("Shutdown complete")
+        self.loop.stop()
 
     def create_application(self, app_id, instance_type='worker', consumer_path=None, consumer_parameters=None):
         scope = {}
