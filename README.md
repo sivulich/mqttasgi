@@ -37,6 +37,7 @@ Parameters:
 | -C / --cert | TLS Certificate | TLS_CERT |
 | -K / --key | TLS Key | TLS_KEY |
 | -S / --cacert | TLS CA Certificate | TLS_CA |
+| -r / --retries | Num. retries on disconnect | MQTT_RETRIES |
 | Last argument | ASGI Apllication |  |
 
 Environment variables are supported and can be set using a `.env` file on the root of the project, but passing a parameter overrides this value.
