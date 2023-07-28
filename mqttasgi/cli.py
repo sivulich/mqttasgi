@@ -9,14 +9,22 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+def bool_type_converter(arg):
+    if arg.lower() == "true":
+        return True
+    elif arg.lower() == "false":
+        return False
+    raise ValueError()
+
+
 def main():
     parser = argparse.ArgumentParser(description="MQTT ASGI Protocol Server")
     parser.add_argument("-H", "--host", help="MQTT broker host",
                         default=os.environ.get("MQTT_HOSTNAME", "localhost"))
     parser.add_argument("-p", "--port", help="MQTT broker port", type=int,
                         default=int(os.environ.get("MQTT_PORT", 1883)))
-    parser.add_argument("-c", "--cleansession", help="MQTT Clean Session", type=bool,
-                        default=os.environ.get("MQTT_CLEAN", "True").lower() == "true")
+    parser.add_argument("-c", "--cleansession", help="MQTT Clean Session", type=bool_type_converter,
+                        default=bool_type_converter(os.environ.get("MQTT_CLEAN", "True")))
     parser.add_argument("-v", "--verbosity", type=int, help="Set verbosity",
                         default=int(os.environ.get("VERBOSITY", 0)))
     parser.add_argument("-U", "--username", help="MQTT username to authorised connection",
@@ -32,6 +40,8 @@ def main():
                         default=os.environ.get("TLS_KEY", None))
     parser.add_argument("-S", "--cacert", help="MQTT TLS CA certificate",
                         default=os.environ.get("TLS_CA", None))
+    parser.add_argument("-SSL", "--use-ssl", dest="use_ssl", help="Use ssl with server signed certificate",
+                        type=bool_type_converter, default=bool_type_converter(os.environ.get("MQTT_USE_SSL", "False")))
     parser.add_argument("-r", "--retries", help="Maximum number of connection retries after unexpected disconnect (0 to always try to reconnect)",
                         default=os.environ.get("MQTT_RETRIES", 3), type=int)
 
@@ -63,7 +73,8 @@ def main():
         cert=args.cert,
         key=args.key,
         ca_cert=args.cacert,
-        connect_max_retries=args.retries
+        connect_max_retries=args.retries,
+        use_ssl=args.use_ssl,
     )
 
     server.run()
