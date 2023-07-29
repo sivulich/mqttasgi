@@ -16,7 +16,7 @@ class Server(object):
     def __init__(self, application, host, port, username=None, password=None,
                  client_id=2407, mqtt_type_pub=None, mqtt_type_usub=None, mqtt_type_sub=None,
                  mqtt_type_msg=None, connect_max_retries=3, logger=None, clean_session=True, cert=None, key=None, ca_cert=None,
-                 use_ssl=False):
+                 use_ssl=False, transport ="tcp"):
 
         self.application_type = application
         self.application_data = {}
@@ -33,7 +33,8 @@ class Server(object):
         self.host = host
         self.port = port
         self.client_id = client_id
-        self.client = mqtt.Client(client_id=self.client_id, userdata={
+        self.transport = transport
+        self.client = mqtt.Client(client_id=self.client_id, transport=self.transport, userdata={
             "server": self,
             "host": self.host,
             "port": self.port,
