@@ -203,7 +203,7 @@ class Server(object):
                 "[mqttasgi][app][subscribe] - Subscription to {} must be updated to QOS: {}".format(topic, qos))
             self.client.unsubscribe(topic)
             self.client.subscribe(topic, qos)
-            status = (qos, status[1])
+            status['qos'] = qos
         elif len(status['apps']) == 0:
             self.log.debug("[mqttasgi][app][subscribe] - Subscription to {}:{}".format(topic, qos))
             self.client.message_callback_add(topic, lambda client, userdata,
