@@ -34,7 +34,7 @@ class Server(object):
         self.port = port
         self.client_id = client_id
         self.transport = transport
-        self.client = mqtt.Client(client_id=self.client_id, transport=self.transport, userdata={
+        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id=self.client_id, transport=self.transport, userdata={
             "server": self,
             "host": self.host,
             "port": self.port,
