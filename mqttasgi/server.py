@@ -393,7 +393,13 @@ class Server(object):
 
     def run(self):
         self.stop = False
-        loop = asyncio.get_event_loop()
+        # ---- Python 3.14-safe event-loop init ----
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        # -----------------------------------------
         self.loop = loop
 
         try:
