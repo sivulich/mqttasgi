@@ -2,6 +2,9 @@
 mqttasgi is an ASGI protocol server that implements a complete interface for MQTT for the Django development framework. Built following [daphne](https://github.com/django/daphne) protocol server.
 
 ![Downloads Shield Count](https://img.shields.io/pypi/dm/mqttasgi)
+![GitHub License](https://img.shields.io/github/license/sivulich/mqttasgi)
+![GitHub contributors](https://img.shields.io/github/contributors/sivulich/mqttasgi)
+
 
 # Features
 - Publish / Subscribe to any topic
