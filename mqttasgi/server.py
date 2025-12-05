@@ -413,7 +413,7 @@ class Server(object):
 
         self.create_application(0, instance_type='master')
 
-        asyncio.ensure_future(self.mqtt_receive_loop())
+        asyncio.ensure_future(self.mqtt_receive_loop(), loop=loop)
 
         try:
             loop.run_forever()
