@@ -356,16 +356,9 @@ class Server(object):
         self.application_data[app_id]['instance'] = application(scope,
                                                                 receive=self.application_data[app_id]['receive'].get,
                                                                 send=lambda message: self._application_send(app_id, message))
-        # ---- Python 3.14-safe event-loop init ----
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        # -----------------------------------------
         task = asyncio.ensure_future(
             self.application_data[app_id]['instance'],
-            loop=loop
+            loop=self.loop
         )
         self.application_data[app_id]['task'] = task
         self.application_data[app_id]['subscriptions'] = {}
@@ -400,13 +393,8 @@ class Server(object):
 
     def run(self):
         self.stop = False
-        # ---- Python 3.14-safe event-loop init ----
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        # -----------------------------------------
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         self.loop = loop
 
         try:
@@ -425,7 +413,7 @@ class Server(object):
 
         self.create_application(0, instance_type='master')
 
-        asyncio.ensure_future(self.mqtt_receive_loop())
+        asyncio.ensure_future(self.mqtt_receive_loop(), loop=loop)
 
         try:
             loop.run_forever()
