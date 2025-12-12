@@ -137,7 +137,6 @@ The consumer can also kill the spawned workers with a specific `app_id`:
 await self.kill_worker(self, app_id)
 ```
 
-
 ## Channel Layers
 MQTTAsgi supports channel layer communications and group messages. It follows the [Channel Layers](https://channels.readthedocs.io/en/stable/topics/channel_layers.html) implementation:
 
@@ -171,6 +170,26 @@ class MyMqttConsumer(MqttConsumer):
         await self.unsubscribe('my/testing/topic')
 ```
 
+# Testing
+MQTTAsgi supports testing by importing the MqttCommunicator, which supports MQTT and standard channels capabilities:
+```
+# Initialize the communicator
+from mqttasgi.testing import MqttComunicator
+communicator = MqttComunicator(MyMqttConsumer.as_asgi(), app_id)
+
+# Test connect
+response = await communicator.connect(timeout)
+
+# Publish
+response = await commuinicator.publish(topic, payload, qos)
+
+# Wait to receive an input
+response = await communicator.receive_from(timeout)
+
+# Disconnect
+await communicator.disconnect(code=1000, timeout=1)
+```
+This can be then used in any test suites.
 
 # Supporters
 
