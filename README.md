@@ -172,7 +172,7 @@ class MyMqttConsumer(MqttConsumer):
 
 # Testing
 MQTTAsgi supports testing by importing the MqttCommunicator, which supports MQTT and standard channels capabilities:
-```
+```python
 # Initialize the communicator
 from mqttasgi.testing import MqttComunicator
 communicator = MqttComunicator(MyMqttConsumer.as_asgi(), app_id)
