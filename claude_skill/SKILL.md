@@ -229,6 +229,170 @@ Consumer responses have this shape:
 
 **Consumer → Server:** `mqtt.pub`, `mqtt.sub`, `mqtt.usub`, `mqttasgi.worker.spawn`, `mqttasgi.worker.kill`
 
+## Project ideas and examples
+
+### Home automation — motion-triggered lights
+
+A motion sensor publishes to `home/sensor/motion`. A consumer listens and publishes a command to the light controller, logging every event to the Django ORM.
+
+```python
+from mqttasgi.consumers import MqttConsumer
+from myapp.models import MotionEvent
+
+class LightAutomationConsumer(MqttConsumer):
+
+    async def connect(self):
+        await self.subscribe('home/sensor/motion', qos=1)
+
+    async def receive(self, mqtt_message):
+        room = mqtt_message['payload'].decode()
+        await MotionEvent.objects.acreate(room=room)
+        await self.publish(f'home/lights/{room}/set', b'on', qos=1)
+
+    async def disconnect(self):
+        await self.unsubscribe('home/sensor/motion')
+```
+
+---
+
+### AI-powered automation — ask Claude before acting
+
+Route sensor data through Claude to decide what action to take. The consumer calls the Anthropic API and publishes the result back onto the MQTT bus.
+
+```python
+import anthropic
+from mqttasgi.consumers import MqttConsumer
+
+client = anthropic.Anthropic()
+
+class AIAutomationConsumer(MqttConsumer):
+
+    async def connect(self):
+        await self.subscribe('home/sensor/#', qos=1)
+
+    async def receive(self, mqtt_message):
+        topic   = mqtt_message['topic']
+        payload = mqtt_message['payload'].decode()
+
+        message = client.messages.create(
+            model='claude-opus-4-6',
+            max_tokens=64,
+            messages=[{
+                'role': 'user',
+                'content': (
+                    f'Sensor reading — topic: {topic}, value: {payload}. '
+                    'Reply with only the MQTT topic and payload to publish, '
+                    'separated by a space. Example: home/lights/living on'
+                ),
+            }],
+        )
+        response = message.content[0].text.strip().split(' ', 1)
+        if len(response) == 2:
+            out_topic, out_payload = response
+            await self.publish(out_topic, out_payload.encode(), qos=1)
+
+    async def disconnect(self):
+        await self.unsubscribe('home/sensor/#')
+```
+
+---
+
+### Energy monitoring — store readings in Django, alert on threshold
+
+Electricity sensors publish consumption data every 30 seconds. The consumer persists each reading and fires an alert if usage spikes.
+
+```python
+from mqttasgi.consumers import MqttConsumer
+from myapp.models import EnergyReading
+
+ALERT_THRESHOLD_WATTS = 3000
+
+class EnergyMonitorConsumer(MqttConsumer):
+
+    async def connect(self):
+        await self.subscribe('home/energy/consumption', qos=1)
+
+    async def receive(self, mqtt_message):
+        watts = float(mqtt_message['payload'])
+        await EnergyReading.objects.acreate(watts=watts)
+        if watts > ALERT_THRESHOLD_WATTS:
+            await self.publish('home/alerts/energy', b'high_consumption', qos=2)
+
+    async def disconnect(self):
+        await self.unsubscribe('home/energy/consumption')
+```
+
+---
+
+### Multi-device coordination — workers per room
+
+Spawn a dedicated worker for each room so subscriptions and logic stay isolated. The master consumer manages the worker lifecycle.
+
+```python
+class MasterConsumer(MqttConsumer):
+
+    ROOMS = ['living', 'bedroom', 'kitchen']
+
+    async def connect(self):
+        for i, room in enumerate(self.ROOMS, start=1):
+            await self.spawn_worker(
+                app_id=i,
+                consumer_path='myapp.consumers.RoomConsumer',
+                consumer_params={'room': room},
+            )
+
+    async def receive(self, mqtt_message): pass
+    async def disconnect(self): pass
+
+
+class RoomConsumer(MqttConsumer):
+
+    async def connect(self):
+        room = self.scope['room']
+        await self.subscribe(f'home/{room}/#', qos=1)
+
+    async def receive(self, mqtt_message):
+        # Handle all topics for this room
+        ...
+
+    async def disconnect(self):
+        room = self.scope['room']
+        await self.unsubscribe(f'home/{room}/#')
+```
+
+---
+
+### Garden irrigation — schedule-aware automation
+
+Combine Django's ORM with MQTT to only water the garden when the schedule says so and soil moisture is below a threshold.
+
+```python
+from django.utils import timezone
+from mqttasgi.consumers import MqttConsumer
+from myapp.models import IrrigationSchedule
+
+class IrrigationConsumer(MqttConsumer):
+
+    async def connect(self):
+        await self.subscribe('garden/sensor/moisture', qos=1)
+
+    async def receive(self, mqtt_message):
+        moisture = float(mqtt_message['payload'])
+        now = timezone.now()
+        scheduled = await IrrigationSchedule.objects.filter(
+            active=True,
+            start_hour=now.hour,
+        ).aexists()
+
+        if scheduled and moisture < 30.0:
+            await self.publish('garden/valve/main', b'open', qos=2)
+
+    async def disconnect(self):
+        await self.unsubscribe('garden/sensor/moisture')
+```
+
+---
+
 ## Common pitfalls
 
 - `MqttComunicator.connect()` returns the **first message** the consumer sends. If `connect()` does nothing (no subscribe, no publish), the call will time out — always subscribe or send something in `connect()`.
