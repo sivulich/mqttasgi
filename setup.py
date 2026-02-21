@@ -14,7 +14,7 @@ setup(
     author="Santiago Ivulich",
     author_email="sivulich@itba.edu.ar",
     url="https://github.com/sivulich/mqttasgi",
-    description_content_type='text/text', 
+    description_content_type='text/markdown',
     description="MQTT ASGI Protocol Server",
     long_description_content_type="text/markdown",
     long_description=open("README.md").read(),
@@ -23,8 +23,8 @@ setup(
     include_package_data=True,
     install_requires=[
         "paho-mqtt",
-        "django",
-        "channels",
+        "django>=3.2",
+        "channels>=3.0",
         "python-dotenv"
     ],
     entry_points={
@@ -39,10 +39,11 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
         'Topic :: Internet :: WWW/HTTP',
         'Topic :: Scientific/Engineering :: Interface Engine/Protocol Translator',
         'Topic :: Software Development :: Libraries :: Python Modules',

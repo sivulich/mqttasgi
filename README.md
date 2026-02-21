@@ -11,47 +11,57 @@ mqttasgi is an ASGI protocol server that implements a complete interface for MQT
 - Multiple workers to handle different topics / subscriptions.
 - Full Django ORM support within consumers.
 - Full Channel Layers support.
-- Full testing consumer to enable TDD.
+- Full testing support to enable TDD (no broker required for unit tests).
 - Lightweight.
-- Django 3.x, 4.x / Channels 3.x support
+- Django 3.2+ / Django 4.x / Django 5.x support
+- Channels 3.x / Channels 4.x support
+- paho-mqtt 1.x and 2.x support
+- Python 3.9 – 3.13 support
 
-# Instalation
-To install mqttasgi for Django 3.x, 4.x
+# Installation
 ```bash
 pip install mqttasgi
 ```
 
-**IMPORTANT NOTE:** If legacy support for Django 2.x is required install latest 0.x mqttasgi.
+**IMPORTANT NOTE:** If legacy support for Django 2.x is required install the latest 0.x mqttasgi release.
+
+# What's new in 2.0.0
+
+- **paho-mqtt 2.x compatibility** — automatically detects the installed paho-mqtt version and uses the correct `CallbackAPIVersion` (2.x) or legacy API (1.x). Both versions are supported with no code changes required.
+- **Python 3.10 – 3.13 compatibility** — removed deprecated `asyncio.ensure_future(loop=...)` calls, replaced with `loop.create_task()`. Removed Python < 3.9 compatibility shims.
+- **Bug fix: integer `client_id`** — the default `client_id` was stored as an integer, causing paho-mqtt to raise `TypeError` at connection time. It is now always coerced to a string.
+- **Better error logging** — connection failures now surface the actual exception at `ERROR` level instead of being silently swallowed.
+- **Test suite** — a full pytest-based test suite is included covering server internals, consumer lifecycle, and optional broker integration tests (auto-skipped when no broker is available).
 
 # Usage
-## Unit
-Mqttasgi provides a cli interface to run the protocol server. 
+## Running the server
+Mqttasgi provides a CLI to run the protocol server.
 ```bash
 mqttasgi -H localhost -p 1883 my_application.asgi:application
 ```
-Parameters:
-| Parameter   | Explanation      | Environment variable | Default |
-|-------------|------------------|:--------------------:|:--------------------:|
+
+| Parameter | Explanation | Environment variable | Default |
+|-----------|-------------|:--------------------:|:-------:|
 | -H / --host | MQTT broker host | MQTT_HOSTNAME | localhost |
 | -p / --port | MQTT broker port | MQTT_PORT | 1883 |
 | -c / --cleansession | MQTT Clean Session | MQTT_CLEAN | True |
-| -v / --verbosity | Logging verbosity | VERBOSITY | 0 |
-| -U / --username | MQTT Username | MQTT_USERNAME |  |
-| -P / --password | MQTT Password | MQTT_PASSWORD |  |
-| -i / --id | MQTT Client ID | MQTT_CLIENT_ID |  |
-| -C / --cert | TLS Certificate | TLS_CERT |  |
-| -K / --key | TLS Key | TLS_KEY |  |
-| -S / --cacert | TLS CA Certificate | TLS_CA |  |
-| -SSL / --use-ssl | Use ssl (without certificate authentication) | MQTT_USE_SSL | False |
+| -v / --verbosity | Logging verbosity (0-2) | VERBOSITY | 0 |
+| -U / --username | MQTT Username | MQTT_USERNAME | |
+| -P / --password | MQTT Password | MQTT_PASSWORD | |
+| -i / --id | MQTT Client ID | MQTT_CLIENT_ID | |
+| -C / --cert | TLS Certificate | TLS_CERT | |
+| -K / --key | TLS Key | TLS_KEY | |
+| -S / --cacert | TLS CA Certificate | TLS_CA | |
+| -SSL / --use-ssl | Use SSL (no certificate auth) | MQTT_USE_SSL | False |
 | -T / --transport | Transport type (tcp or websockets) | MQTT_TRANSPORT | tcp |
-| -r / --retries | Num. retries on disconnect | MQTT_RETRIES | 3 |
-| Last argument | ASGI Apllication |  | |
+| -r / --retries | Retries on disconnect (0 = unlimited) | MQTT_RETRIES | 3 |
+| Last argument | ASGI Application | | |
 
-Environment variables are supported and can be set using a `.env` file on the root of the project, but passing a parameter overrides this value.
+Environment variables are supported via a `.env` file at the project root. A CLI argument always takes precedence over the corresponding environment variable.
 
 ## Consumer
 
-To add your consumer to the `asgi.py` file in your django application:
+Register your consumer in `asgi.py`:
 ```python
 import os
 import django
@@ -64,47 +74,41 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'my_application.settings')
 django.setup()
 
 application = ProtocolTypeRouter({
-        'http': get_asgi_application(),
-        'mqtt': MyMqttConsumer.as_asgi(),
-    })
-```    
-Your consumer should inherit from MqttConsumer in mqttasgi.consumers. It implements helper functions such as publish and subscribe. A simple example:
+    'http': get_asgi_application(),
+    'mqtt': MyMqttConsumer.as_asgi(),
+})
+```
+
+Your consumer inherits from `MqttConsumer` and overrides three lifecycle methods:
+
 ```python
 from mqttasgi.consumers import MqttConsumer
+
 class MyMqttConsumer(MqttConsumer):
 
     async def connect(self):
-        await self.subscribe('my/testing/topic', 2)
+        await self.subscribe('my/testing/topic', qos=2)
 
     async def receive(self, mqtt_message):
-        print('Received a message at topic:', mqtt_message['topic'])
-        print('With payload', mqtt_message['payload'])
-        print('And QOS:', mqtt_message['qos'])
-        pass
+        print('Received at topic:', mqtt_message['topic'])
+        print('Payload:', mqtt_message['payload'])
+        print('QoS:', mqtt_message['qos'])
 
     async def disconnect(self):
         await self.unsubscribe('my/testing/topic')
-    
 ```
+
 ## Consumer API
 
 ### MQTT
 
-The consumer provides a full API to interact with MQTT and with the channel layer:
-
-
 #### Publish
 
-Publishes a message to the MQTT topic passed as argument with the given payload. The QOS of the message or retain flagged can be also passed as aditional arguments.
-
-```python   
-
+```python
 await self.publish(topic, payload, qos=1, retain=False)
 ```
 
 #### Subscribe
-
-Subscribes to the MQTT topic passed as argument with the given QOS.
 
 ```python
 await self.subscribe(topic, qos)
@@ -112,19 +116,17 @@ await self.subscribe(topic, qos)
 
 #### Unsubscribe
 
-Unsubscribes from the given MQTT topic.
-
 ```python
 await self.unsubscribe(topic)
 ```
 
-### Worker API - Experimental
+### Worker API — Experimental
 
-This is an advanced functionality of the MQTTAsgi protocol server that allows the user to run multiple consumers on the same mqttasgi instance.
+Allows running multiple consumers inside the same mqttasgi instance. Only the master consumer (the one started automatically, `instance_type='master'`) may spawn or kill workers.
 
 #### Spawn Worker
 
-The `app_id` is a unique identifier for the worker, the `consumer_path` is the dot separated path to the consumer and `consumer_params` is the parameter dictonary to pass down to the new consumer.
+`app_id` is a unique identifier, `consumer_path` is the dotted import path to the consumer class, and `consumer_params` is a dict merged into the consumer scope.
 
 ```python
 await self.spawn_worker(app_id, consumer_path, consumer_params)
@@ -132,56 +134,88 @@ await self.spawn_worker(app_id, consumer_path, consumer_params)
 
 #### Kill Worker
 
-The consumer can also kill the spawned workers with a specific `app_id`:
 ```python
-await self.kill_worker(self, app_id)
+await self.kill_worker(app_id)
 ```
 
-
 ## Channel Layers
-MQTTAsgi supports channel layer communications and group messages. It follows the [Channel Layers](https://channels.readthedocs.io/en/stable/topics/channel_layers.html) implementation:
 
-Outside of the consumer:
+mqttasgi supports Django Channels layer communications and group messages following the [Channel Layers](https://channels.readthedocs.io/en/stable/topics/channel_layers.html) spec.
+
+Outside the consumer:
 ```python
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+
 channel_layer = get_channel_layer()
-async_to_sync(channel_layer.group_send)("my.group", {"type": "my.custom.message", "text":"Hi from outside of the consumer"})
+async_to_sync(channel_layer.group_send)(
+    "my.group",
+    {"type": "my.custom.message", "text": "Hi from outside the consumer"}
+)
 ```
-In the consumer:
+
+Inside the consumer:
 ```python
 from mqttasgi.consumers import MqttConsumer
+
 class MyMqttConsumer(MqttConsumer):
 
     async def connect(self):
-        await self.subscribe('my/testing/topic', 2)
+        await self.subscribe('my/testing/topic', qos=2)
         await self.channel_layer.group_add("my.group", self.channel_name)
 
     async def receive(self, mqtt_message):
-        print('Received a message at topic:', mqtt_message['topic'])
-        print('With payload', mqtt_message['payload'])
-        print('And QOS:', mqtt_message['qos'])
-        pass
-    
+        print('Received at topic:', mqtt_message['topic'])
+
     async def my_custom_message(self, event):
-        print('Received a channel layer message')
-        print(event)
+        print('Channel layer message:', event)
 
     async def disconnect(self):
         await self.unsubscribe('my/testing/topic')
 ```
 
+## Testing
+
+mqttasgi ships with `MqttComunicator`, an ASGI test helper that drives your consumer directly without a running broker — ideal for fast unit tests.
+
+```python
+import pytest
+from mqttasgi.testing import MqttComunicator
+from my_application.consumers import MyMqttConsumer
+
+@pytest.mark.asyncio
+async def test_consumer_subscribes_on_connect():
+    comm = MqttComunicator(MyMqttConsumer.as_asgi(), app_id=1)
+    response = await comm.connect()          # triggers connect()
+    assert response['type'] == 'mqtt.sub'
+    assert response['mqtt']['topic'] == 'my/testing/topic'
+    await comm.disconnect()
+
+@pytest.mark.asyncio
+async def test_consumer_handles_message():
+    comm = MqttComunicator(MyMqttConsumer.as_asgi(), app_id=1)
+    await comm.connect()
+    await comm.publish('my/testing/topic', b'hello', qos=1)
+    response = await comm.receive_from()     # captures what the consumer sent back
+    await comm.disconnect()
+```
+
+Install test dependencies and run:
+```bash
+pip install pytest pytest-asyncio
+pytest tests/ -v
+```
+
+Integration tests that require a live broker are skipped automatically when no broker is available.
 
 # Supporters
 
 ## MAPER - IIOT Asset Monitoring - [Webpage](https://home.mapertech.com/en/)
 
-![Maper Logo](https://media-exp1.licdn.com/dms/image/C4D0BAQEi2zH7bSXq8A/company-logo_200_200/0/1529507408740?e=2147483647&v=beta&t=XVIxvlp41JE8_YnwwDNcGlnu7VVanxPGICNoGboHyTY)
-
 Predict failures before they happen.
 
 Real time health monitoring to avoid unexpected downtimes and organize maintenance in industrial plants.
 
-Combining IoT Technology and Artificial Intelligence, we deliver a complete view of your assets like never before. 
+Combining IoT Technology and Artificial Intelligence, we deliver a complete view of your assets like never before.
 
-With real time health diagnostics you will increase the reliability of the whole production process, benefitting both the company and it's staff.
+With real time health diagnostics you will increase the reliability of the whole production process, benefitting both the company and its staff.

@@ -7,9 +7,11 @@ import signal
 import json
 import paho.mqtt.client as mqtt
 from .utils import get_application
-import sys
 
 _logger = logging.getLogger(__name__)
+
+# paho-mqtt 2.0 introduced CallbackAPIVersion; detect which API is available
+_PAHO_MQTT_V2 = hasattr(mqtt, 'CallbackAPIVersion')
 
 
 class Server(object):
@@ -32,13 +34,19 @@ class Server(object):
 
         self.host = host
         self.port = port
-        self.client_id = client_id
+        # paho-mqtt requires client_id to be a string; coerce any legacy integer values
+        self.client_id = str(client_id) if client_id is not None else ""
         self.transport = transport
-        self.client = mqtt.Client(client_id=self.client_id, transport=self.transport, userdata={
-            "server": self,
-            "host": self.host,
-            "port": self.port,
-        }, clean_session=clean_session)
+        client_kwargs = dict(
+            client_id=self.client_id,
+            transport=self.transport,
+            userdata={"server": self, "host": self.host, "port": self.port},
+            clean_session=clean_session,
+        )
+        if _PAHO_MQTT_V2:
+            self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, **client_kwargs)
+        else:
+            self.client = mqtt.Client(**client_kwargs)
 
         self.client.enable_logger(self.log)
         self.username = username
@@ -62,7 +70,9 @@ class Server(object):
         self.mqtt_type_usub = mqtt_type_usub or "mqtt.usub"
         self.mqtt_type_msg = mqtt_type_msg or "mqtt.msg"
 
-    def _on_connect(self, client, userdata, flags, rc):
+    def _on_connect(self, client, userdata, flags, *args):
+        # paho 1.x: args = (rc,)
+        # paho 2.x: args = (reason_code, properties)
         self.log.info("[mqttasgi][connection][connected] - Connected to {}:{}".format(self.host, self.port))
         for app_id in self.application_data:
             try:
@@ -77,7 +87,9 @@ class Server(object):
                                "of {}".format(app_id))
                 self.log.exception(e)
 
-    def _on_disconnect(self, client, userdata, rc):
+    def _on_disconnect(self, client, userdata, *args):
+        # paho 1.x: args = (rc,)
+        # paho 2.x: args = (disconnect_flags, reason_code, properties)
         self.log.warning("[mqttasgi][connection][disconnected] - Disconnected from {}:{}".format(self.host, self.port))
         if not self.stop:
             self._handle_reconnect()
@@ -157,6 +169,8 @@ class Server(object):
         try:
             self.client.connect(self.host, self.port)
         except Exception as e:
+            self.log.error("[mqttasgi][connect] - Initial connection to %s:%s failed: %s",
+                           self.host, self.port, e, exc_info=True)
             try:
                 self._handle_reconnect(on_connect=True)
             except Exception as e:
@@ -329,8 +343,7 @@ class Server(object):
             )
         self.log.warning("MQTTASGI Waiting for all applications to close")
         await asyncio.gather(*[self.application_data[app_id]["task"] for app_id in self.application_data])
-        all_tasks = asyncio.Task.all_tasks if sys.version_info[1] < 7 else asyncio.all_tasks
-        tasks = [t for t in all_tasks() if t is not asyncio.current_task()]
+        tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
         self.log.info(f"Cancelling {len(tasks)} outstanding tasks")
         [task.cancel() for task in tasks]
         self.client.loop_stop()
@@ -356,9 +369,8 @@ class Server(object):
         self.application_data[app_id]['instance'] = application(scope,
                                                                 receive=self.application_data[app_id]['receive'].get,
                                                                 send=lambda message: self._application_send(app_id, message))
-        task = asyncio.ensure_future(
-            self.application_data[app_id]['instance'],
-            loop=self.loop
+        task = self.loop.create_task(
+            self.application_data[app_id]['instance']
         )
         self.application_data[app_id]['task'] = task
         self.application_data[app_id]['subscriptions'] = {}
@@ -403,8 +415,9 @@ class Server(object):
                     getattr(signal, signame),
                     lambda signame=signame: asyncio.create_task(self.shutdown(signame)),
                 )
-        except NotImplementedError:
-            # Running on windows
+        except (NotImplementedError, RuntimeError):
+            # NotImplementedError: running on Windows
+            # RuntimeError: running in a non-main thread (e.g. during testing)
             pass
         # loop.set_exception_handler(self.handle_exception)
         self.log.info("MQTTASGI initialized. The complete MQTT ASGI protocol server.")
@@ -413,7 +426,7 @@ class Server(object):
 
         self.create_application(0, instance_type='master')
 
-        asyncio.ensure_future(self.mqtt_receive_loop(), loop=loop)
+        loop.create_task(self.mqtt_receive_loop())
 
         try:
             loop.run_forever()
