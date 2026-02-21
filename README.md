@@ -292,10 +292,10 @@ async def test_consumer_params_passed_to_scope():
 | Method | Description |
 |--------|-------------|
 | `MqttComunicator(app, app_id, instance_type='worker', consumer_parameters=None)` | Create a communicator for the given ASGI app |
-| `await comm.connect()` | Send `mqtt.connect` to the consumer and return the first response |
+| `await comm.connect(timeout=1)` | Send `mqtt.connect` to the consumer and return the first response |
 | `await comm.publish(topic, payload, qos)` | Send an `mqtt.msg` event to the consumer |
-| `await comm.receive_from()` | Receive the next message the consumer sent (e.g. `mqtt.pub`, `mqtt.sub`) |
-| `await comm.disconnect()` | Send `mqtt.disconnect` and wait for the consumer to close |
+| `await comm.receive_from(timeout=1)` | Receive the next message the consumer sent (e.g. `mqtt.pub`, `mqtt.sub`) |
+| `await comm.disconnect(code=1000, timeout=1)` | Send `mqtt.disconnect` and wait for the consumer to close |
 
 ### Integration tests (optional, requires a broker)
 
