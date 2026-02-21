@@ -176,37 +176,140 @@ class MyMqttConsumer(MqttConsumer):
 
 ## Testing
 
-mqttasgi ships with `MqttComunicator`, an ASGI test helper that drives your consumer directly without a running broker — ideal for fast unit tests.
+mqttasgi ships with `MqttComunicator`, an ASGI test helper that drives your consumer directly without a running MQTT broker — perfect for fast, isolated unit tests.
+
+### Setup
+
+Install test dependencies:
+```bash
+pip install pytest pytest-asyncio django channels
+```
+
+Create `pytest.ini` at the project root:
+```ini
+[pytest]
+asyncio_mode = auto
+```
+
+Create `tests/conftest.py` to bootstrap Django before the tests run:
+```python
+import django
+from django.conf import settings
+
+def pytest_configure(config):
+    if not settings.configured:
+        settings.configure(
+            SECRET_KEY='test-secret-key',
+            INSTALLED_APPS=['channels'],
+            DATABASES={},
+            CHANNEL_LAYERS={
+                'default': {
+                    'BACKEND': 'channels.layers.InMemoryChannelLayer',
+                }
+            },
+        )
+        django.setup()
+```
+
+### Testing consumers
+
+`MqttComunicator` simulates the full ASGI lifecycle: it sends events to your consumer and captures what the consumer sends back, with no broker involved.
 
 ```python
+# tests/test_consumers.py
 import pytest
 from mqttasgi.testing import MqttComunicator
-from my_application.consumers import MyMqttConsumer
+from mqttasgi.consumers import MqttConsumer
 
-@pytest.mark.asyncio
-async def test_consumer_subscribes_on_connect():
-    comm = MqttComunicator(MyMqttConsumer.as_asgi(), app_id=1)
-    response = await comm.connect()          # triggers connect()
+
+class EchoConsumer(MqttConsumer):
+    async def connect(self):
+        await self.subscribe('test/topic', qos=1)
+
+    async def receive(self, mqtt_message):
+        await self.publish('test/response', mqtt_message['payload'], qos=1)
+
+    async def disconnect(self):
+        await self.unsubscribe('test/topic')
+
+
+async def test_connect_sends_subscribe():
+    """connect() should subscribe to the expected topic."""
+    comm = MqttComunicator(EchoConsumer.as_asgi(), app_id=1)
+    response = await comm.connect()
     assert response['type'] == 'mqtt.sub'
-    assert response['mqtt']['topic'] == 'my/testing/topic'
+    assert response['mqtt']['topic'] == 'test/topic'
+    assert response['mqtt']['qos'] == 1
     await comm.disconnect()
 
-@pytest.mark.asyncio
-async def test_consumer_handles_message():
-    comm = MqttComunicator(MyMqttConsumer.as_asgi(), app_id=1)
+
+async def test_disconnect_sends_unsubscribe():
+    """disconnect() should unsubscribe from all topics."""
+    comm = MqttComunicator(EchoConsumer.as_asgi(), app_id=1)
     await comm.connect()
-    await comm.publish('my/testing/topic', b'hello', qos=1)
-    response = await comm.receive_from()     # captures what the consumer sent back
+    await comm.disconnect()
+    response = await comm.receive_from()
+    assert response['type'] == 'mqtt.usub'
+    assert response['mqtt']['topic'] == 'test/topic'
+
+
+async def test_echo():
+    """Consumer should publish a response for each received message."""
+    comm = MqttComunicator(EchoConsumer.as_asgi(), app_id=1)
+    await comm.connect()
+    await comm.publish('test/topic', b'hello', qos=1)
+    response = await comm.receive_from()
+    assert response['type'] == 'mqtt.pub'
+    assert response['mqtt']['topic'] == 'test/response'
+    assert response['mqtt']['payload'] == b'hello'
+    await comm.disconnect()
+
+
+async def test_consumer_params_passed_to_scope():
+    """Custom parameters should be available in the consumer scope."""
+    received = {}
+
+    class ParamConsumer(MqttConsumer):
+        async def connect(self):
+            received.update(self.scope)
+            await self.subscribe('dummy', 1)
+        async def receive(self, mqtt_message): pass
+        async def disconnect(self): pass
+
+    comm = MqttComunicator(
+        ParamConsumer.as_asgi(),
+        app_id=5,
+        consumer_parameters={'device_id': 'sensor-01'},
+    )
+    await comm.connect()
+    assert received['device_id'] == 'sensor-01'
+    assert received['app_id'] == 5
     await comm.disconnect()
 ```
 
-Install test dependencies and run:
+### MqttComunicator API
+
+| Method | Description |
+|--------|-------------|
+| `MqttComunicator(app, app_id, instance_type='worker', consumer_parameters=None)` | Create a communicator for the given ASGI app |
+| `await comm.connect()` | Send `mqtt.connect` to the consumer and return the first response |
+| `await comm.publish(topic, payload, qos)` | Send an `mqtt.msg` event to the consumer |
+| `await comm.receive_from()` | Receive the next message the consumer sent (e.g. `mqtt.pub`, `mqtt.sub`) |
+| `await comm.disconnect()` | Send `mqtt.disconnect` and wait for the consumer to close |
+
+### Integration tests (optional, requires a broker)
+
+For end-to-end tests against a real MQTT broker, start mosquitto and run:
+
 ```bash
-pip install pytest pytest-asyncio
-pytest tests/ -v
+# macOS
+brew install mosquitto
+
+# Run only integration tests
+pytest tests/test_integration.py -v
 ```
 
-Integration tests that require a live broker are skipped automatically when no broker is available.
+Integration tests are automatically skipped when no broker is available, so they never break CI in environments without one.
 
 # Supporters
 
