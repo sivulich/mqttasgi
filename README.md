@@ -5,7 +5,6 @@ mqttasgi is an ASGI protocol server that implements a complete interface for MQT
 ![GitHub License](https://img.shields.io/github/license/sivulich/mqttasgi)
 ![GitHub contributors](https://img.shields.io/github/contributors/sivulich/mqttasgi)
 
-
 # Features
 - Publish / Subscribe to any topic
 - Multiple workers to handle different topics / subscriptions.
@@ -312,6 +311,14 @@ Integration tests are automatically skipped when no broker is available, so they
 - **Bug fix: integer `client_id`** — the default `client_id` was stored as an integer, causing paho-mqtt to raise `TypeError` at connection time. It is now always coerced to a string.
 - **Better error logging** — connection failures now surface the actual exception at `ERROR` level instead of being silently swallowed.
 - **Test suite** — a full pytest-based test suite is included covering server internals, consumer lifecycle, and optional broker integration tests (auto-skipped when no broker is available).
+
+# AI Assistant Skill
+
+mqttasgi is available as an [OpenClaw](https://clawhub.ai/) skill. AI assistants that support OpenClaw skills can install it to get full knowledge of the API, consumer patterns, testing utilities, and home automation use cases.
+
+- **Slug:** `mqttasgi`
+- **Display name:** `mqttasgi - MQTT ASGI for Django`
+- **Skill file:** [`claude_skill/SKILL.md`](claude_skill/SKILL.md)
 
 # Supporters
 
