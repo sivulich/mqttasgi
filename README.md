@@ -25,13 +25,7 @@ pip install mqttasgi
 
 **IMPORTANT NOTE:** If legacy support for Django 2.x is required install the latest 0.x mqttasgi release.
 
-# What's new in 2.0.0
 
-- **paho-mqtt 2.x compatibility** — automatically detects the installed paho-mqtt version and uses the correct `CallbackAPIVersion` (2.x) or legacy API (1.x). Both versions are supported with no code changes required.
-- **Python 3.10 – 3.13 compatibility** — removed deprecated `asyncio.ensure_future(loop=...)` calls, replaced with `loop.create_task()`. Removed Python < 3.9 compatibility shims.
-- **Bug fix: integer `client_id`** — the default `client_id` was stored as an integer, causing paho-mqtt to raise `TypeError` at connection time. It is now always coerced to a string.
-- **Better error logging** — connection failures now surface the actual exception at `ERROR` level instead of being silently swallowed.
-- **Test suite** — a full pytest-based test suite is included covering server internals, consumer lifecycle, and optional broker integration tests (auto-skipped when no broker is available).
 
 # Usage
 ## Running the server
@@ -310,6 +304,14 @@ pytest tests/test_integration.py -v
 ```
 
 Integration tests are automatically skipped when no broker is available, so they never break CI in environments without one.
+
+# What's new in 2.0.0
+
+- **paho-mqtt 2.x compatibility** — automatically detects the installed paho-mqtt version and uses the correct `CallbackAPIVersion` (2.x) or legacy API (1.x). Both versions are supported with no code changes required.
+- **Python 3.10 – 3.13 compatibility** — removed deprecated `asyncio.ensure_future(loop=...)` calls, replaced with `loop.create_task()`. Removed Python < 3.9 compatibility shims.
+- **Bug fix: integer `client_id`** — the default `client_id` was stored as an integer, causing paho-mqtt to raise `TypeError` at connection time. It is now always coerced to a string.
+- **Better error logging** — connection failures now surface the actual exception at `ERROR` level instead of being silently swallowed.
+- **Test suite** — a full pytest-based test suite is included covering server internals, consumer lifecycle, and optional broker integration tests (auto-skipped when no broker is available).
 
 # Supporters
 
