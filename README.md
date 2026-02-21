@@ -320,14 +320,3 @@ mqttasgi is available as an [OpenClaw](https://clawhub.ai/) skill. AI assistants
 - **Display name:** `mqttasgi - MQTT ASGI for Django`
 - **Skill file:** [`claude_skill/SKILL.md`](claude_skill/SKILL.md)
 
-# Supporters
-
-## MAPER - IIOT Asset Monitoring - [Webpage](https://home.mapertech.com/en/)
-
-Predict failures before they happen.
-
-Real time health monitoring to avoid unexpected downtimes and organize maintenance in industrial plants.
-
-Combining IoT Technology and Artificial Intelligence, we deliver a complete view of your assets like never before.
-
-With real time health diagnostics you will increase the reliability of the whole production process, benefitting both the company and its staff.
