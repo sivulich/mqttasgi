@@ -110,34 +110,3 @@ class Server(_BaseServer):
                 #print(f'[STRIP] {topic} -> {stripped}')
                 return stripped
         return topic
-
-    def _mqtt_receive(self, subscription, topic, payload, qos, properties):
-        if subscription == -1:
-            self.log.warning("[mqttasgi][mqtt][receive] - Received message that no app is subscribed"
-                           " to topic:{} adding to queue".format(topic))
-            if topic not in self.topic_queues:
-                self.topic_queues[topic] = []
-
-            self.topic_queues[topic] += [{
-                        'topic': topic,
-                        'payload': payload,
-                        'qos': qos,
-                        'properties': properties
-                    }]
-            return
-
-        for app_id in self.topics_subscription[subscription]['apps']:
-            try:
-                self.application_data[app_id]['receive'].put_nowait({
-                    'type': 'mqtt.msg',
-                    'mqtt': {
-                        'topic': topic,
-                        'payload': payload,
-                        'qos': qos
-                    }
-                })
-            except Exception as e:
-                self.log.error("[mqttasgi][mqtt][receive] - Cant add to queue"
-                               "of {}".format(app_id))
-                self.log.exception(e)
-        self.log.debug("[mqttasgi][mqtt][receive] - Added message to queue app_ids:{} topic:{}".format(self.topics_subscription[subscription]['apps'], topic))
