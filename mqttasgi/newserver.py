@@ -22,7 +22,7 @@ class Server(_BaseServer):
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = lambda client, userdata, message: \
-            self._mqtt_receive(-1, message.topic, message.payload, message.qos, getattr(message, 'properties', None))
+            self._mqtt_receive(-1, message.topic, message.payload, message.qos)
 
     async def mqtt_receive_loop(self):
         if self.username:
