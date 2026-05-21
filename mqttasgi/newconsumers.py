@@ -92,6 +92,13 @@ class MqttConsumerV5(MqttConsumer):
         logger.debug("[MqttConsumerV5][disconnect] app_id=%s", self.scope.get('app_id'))
 
     async def mqtt_connect(self, event):
+        if self.subscribed_topics:
+            logger.warning(
+                "[MqttConsumerV5][mqtt_connect] clearing %d stale subscriptions before connect: %s",
+                len(self.subscribed_topics),
+                self.subscribed_topics,
+            )
+            self.subscribed_topics.clear()
         logger.info(
             "[MqttConsumerV5][mqtt_connect] app_id=%s instance_type=%s",
             self.scope.get('app_id'),
