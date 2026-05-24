@@ -1,4 +1,5 @@
 from .server import Server as _BaseServer
+import asyncio
 import paho.mqtt.client as mqtt
 from paho.mqtt.properties import Properties
 from paho.mqtt.packettypes import PacketTypes
@@ -266,7 +267,12 @@ class Server(_BaseServer):
             self._handle_reconnect_failure()
 
     async def mqtt_receive_loop(self):
-        """Override para respeitar transport unix e MQTTv5 no connect inicial."""
+        """Override para respeitar transport unix e MQTTv5 no connect inicial.
+
+        Usa asyncio socket callbacks em vez de polling (loop + sleep a 50Hz).
+        O event loop acorda apenas quando há dados no socket MQTT — CPU idle ≈ 0.
+        loop_misc() a cada 1s cuida de keepalives e ping timeouts.
+        """
         if self.username:
             self.client.username_pw_set(self.username, self.password)
 
@@ -274,6 +280,25 @@ class Server(_BaseServer):
             self.client.tls_set(ca_certs=self.ca_cert, certfile=self.cert, keyfile=self.key)
         elif self.use_ssl:
             self.client.tls_set()
+
+        loop = asyncio.get_event_loop()
+
+        def _on_socket_open(client, userdata, sock):
+            loop.add_reader(sock, client.loop_read)
+
+        def _on_socket_close(client, userdata, sock):
+            loop.remove_reader(sock)
+
+        def _on_socket_register_write(client, userdata, sock):
+            loop.add_writer(sock, client.loop_write)
+
+        def _on_socket_unregister_write(client, userdata, sock):
+            loop.remove_writer(sock)
+
+        self.client.on_socket_open             = _on_socket_open
+        self.client.on_socket_close            = _on_socket_close
+        self.client.on_socket_register_write   = _on_socket_register_write
+        self.client.on_socket_unregister_write = _on_socket_unregister_write
 
         try:
             if self.transport == 'unix':
@@ -292,7 +317,7 @@ class Server(_BaseServer):
         self.log.info("MQTT loop start")
         try:
             while not self.stop:
-                self.client.loop(timeout=0.01)
-                await sleep(0.01)
+                self.client.loop_misc()
+                await sleep(1)
         except Exception:
             await self.shutdown('Exception in receive loop')
