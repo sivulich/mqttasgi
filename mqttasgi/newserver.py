@@ -250,11 +250,17 @@ class Server(_BaseServer):
         self.client.publish(**kwargs)
 
     def _handle_reconnect(self, on_connect=False):
-        """Override para respeitar transport unix e MQTTv5 no reconnect."""
+        """Override para respeitar transport unix e MQTTv5 no reconnect.
+
+        Limita a 10 tentativas (máx ~5 min de espera) antes de sair com código 1,
+        permitindo que o Docker reinicie o container via restart: on-failure.
+        """
         import time
+        import sys
+        _max = self.connect_max_retries if self.connect_max_retries > 0 else 10
         tries = 0
-        while tries < self.connect_max_retries or self.connect_max_retries == 0:
-            self.log.info("[mqttasgi][connection][reconnect] - Attempting {} reconnect".format(tries))
+        while tries < _max:
+            self.log.warning("[mqttasgi][reconnect] tentativa %d/%d", tries + 1, _max)
             try:
                 if on_connect is False:
                     self.client.reconnect()
@@ -265,17 +271,17 @@ class Server(_BaseServer):
                 else:
                     self.client.connect(self.host, self.port)
                 self.log.warning(
-                    "[mqttasgi][connection][reconnect] - Reconnected after {} attempts".format(tries)
+                    "[mqttasgi][reconnect] reconectado após %d tentativas", tries
                 )
-                break
+                return
             except KeyboardInterrupt as e:
                 raise e
             except Exception:
-                self.log.debug("[mqttasgi][connection][reconnect] - Exception during reconnect", exc_info=True)
-                time.sleep(min(tries, 30))
+                self.log.debug("[mqttasgi][reconnect] falha na tentativa %d", tries, exc_info=True)
+                time.sleep(min(tries * 3, 30))
             tries += 1
-        else:
-            self._handle_reconnect_failure()
+        self.log.error("[mqttasgi][reconnect] esgotadas %d tentativas — saindo (exit 1)", _max)
+        sys.exit(1)
 
     async def mqtt_receive_loop(self):
         """Override para respeitar transport unix e MQTTv5 no connect inicial.
