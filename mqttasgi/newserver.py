@@ -72,6 +72,12 @@ class Server(_BaseServer):
         if properties is None:
             properties = {}
 
+        self.log.info(
+            "[mqttasgi][receive] sub=%r topic=%s payload_len=%d known_subs=%s",
+            subscription, topic, len(payload) if payload else 0,
+            list(self.topics_subscription.keys()),
+        )
+
         if subscription == -1:
             self.log.warning(
                 "[mqttasgi][mqtt][receive] - Received message that no app is subscribed"
@@ -128,6 +134,10 @@ class Server(_BaseServer):
             self.client.subscribe(raw_topic, qos)
             status['qos'] = qos
         elif len(status['apps']) == 0:
+            self.log.info(
+                "[mqttasgi][subscribe] registering callback+subscribe raw=%s stripped=%s qos=%s",
+                raw_topic, topic, qos,
+            )
             # callback com properties
             self.client.message_callback_add(
                 topic,
@@ -141,6 +151,7 @@ class Server(_BaseServer):
             )
             self.client.subscribe(raw_topic, qos)
             status['qos'] = qos
+            self.log.info("[mqttasgi][subscribe] done raw=%s stripped=%s", raw_topic, topic)
         else:
             self.log.debug(
                 "[mqttasgi][app][subscribe] - Subscription to {}:{} has {} listeners"
@@ -284,15 +295,19 @@ class Server(_BaseServer):
         loop = asyncio.get_event_loop()
 
         def _on_socket_open(client, userdata, sock):
+            self.log.info("[mqttasgi][socket] open fd=%s — reader registered", sock.fileno())
             loop.add_reader(sock, client.loop_read)
 
         def _on_socket_close(client, userdata, sock):
+            self.log.info("[mqttasgi][socket] close fd=%s — reader removed", sock.fileno())
             loop.remove_reader(sock)
 
         def _on_socket_register_write(client, userdata, sock):
+            self.log.info("[mqttasgi][socket] register_write fd=%s — writer registered", sock.fileno())
             loop.add_writer(sock, client.loop_write)
 
         def _on_socket_unregister_write(client, userdata, sock):
+            self.log.info("[mqttasgi][socket] unregister_write fd=%s — writer removed", sock.fileno())
             loop.remove_writer(sock)
 
         self.client.on_socket_open             = _on_socket_open
@@ -314,10 +329,17 @@ class Server(_BaseServer):
             except Exception:
                 await self.shutdown('CONNECTION_ERROR')
 
-        self.log.info("MQTT loop start")
+        self.log.info("[mqttasgi][loop] MQTT loop start — connected to %s:%s", self.host, self.port)
+        _heartbeat = 0
         try:
             while not self.stop:
                 self.client.loop_misc()
+                _heartbeat += 1
+                if _heartbeat % 30 == 0:
+                    self.log.info(
+                        "[mqttasgi][loop] heartbeat tick=%d subs=%s",
+                        _heartbeat, list(self.topics_subscription.keys()),
+                    )
                 await sleep(1)
         except Exception:
             await self.shutdown('Exception in receive loop')
